@@ -1,8 +1,7 @@
+import "./helpers/test-env";
 import assert from "node:assert/strict";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../src/modules/app.module";
-import { PrismaService } from "../src/services/prisma.service";
-import { FastifyAdapter } from "@nestjs/platform-fastify";
 import {
   disconnectDatabase,
   recreateTestDatabase,
@@ -61,7 +60,7 @@ class HttpClient {
         "content-type": "application/json",
         ...(this.cookieHeader ? { cookie: this.cookieHeader } : {}),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
 
     const setCookies =
@@ -77,7 +76,7 @@ class HttpClient {
     const payload = await response.json();
     return {
       status: response.status,
-      body: payload,
+      body: payload as any,
     };
   }
 }
@@ -101,7 +100,7 @@ const startServer = async () => {
   process.env.AUTH_AUDIENCE = "tradesperson-erp-test-users";
   process.env.COOKIE_DOMAIN = "localhost";
   
-  app = await NestFactory.create(AppModule, new FastifyAdapter(), { logger: false });
+  app = await NestFactory.create(AppModule, { logger: false });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.use(cookieParser());
   await app.listen(4000, "127.0.0.1");

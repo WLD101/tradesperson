@@ -1,11 +1,10 @@
 import { execSync } from "node:child_process";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 import { PrismaClient } from "@prisma/client";
-import { ensureTestEnv } from "./test-env.ts";
+import { ensureTestEnv } from "./test-env";
 
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const currentDir = __dirname;
 const rootDir = path.resolve(currentDir, "../../../..");
 const dbPackageDir = path.resolve(rootDir, "packages/db");
 

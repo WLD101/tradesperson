@@ -12,7 +12,7 @@ import type {
   TenantMembership,
   User,
 } from "@prisma/client";
-import { prisma } from "./test-db.ts";
+import { prisma } from "./test-db";
 
 const password = "Password123!";
 
@@ -67,7 +67,6 @@ export type IsolationFixtureSet = {
   ownerB: MembershipWithUser;
   branchUserA1: MembershipWithUser;
   customerA1: Customer;
-  customerA2: Customer;
   customerA2: Customer;
   customerB1: Customer;
   siteA1: Site;

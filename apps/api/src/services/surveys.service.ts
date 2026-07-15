@@ -190,7 +190,7 @@ export class SurveysService {
       throw new BadRequestException("Cannot add measurements in an immutable survey state.");
     }
 
-    const room = await this.prisma.client.surveyRoom.findFirstOrThrow({ where: { id: roomId, surveyId, tenantId } });
+    await this.prisma.client.surveyRoom.findFirstOrThrow({ where: { id: roomId, surveyId, tenantId } });
     
     return this.prisma.client.$transaction(async (tx) => {
       const component = await tx.measurementComponent.create({

@@ -7,14 +7,12 @@ import {
   Patch,
   Post,
   UseGuards,
-  BadRequestException,
 } from "@nestjs/common";
 import { z } from "zod";
 import { AuthGuard } from "../shared/auth.guard";
 import { RequirePermissions } from "../shared/permissions.decorator";
 import { PermissionsGuard } from "../shared/permissions.guard";
 import { CurrentSession } from "../shared/session.decorator";
-import { AuditService } from "../services/audit.service";
 import { BranchAccessService } from "../services/branch-access.service";
 import { PrismaService } from "../services/prisma.service";
 import { TenantAccessService } from "../services/tenant-access.service";

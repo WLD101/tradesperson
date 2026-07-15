@@ -17,8 +17,6 @@ import { CoreModule } from "./core.module";
 import { CrmModule } from "./crm.module";
 import { SurveysModule } from "./surveys.module";
 
-const env = loadEnv();
-
 @Module({
   imports: [
     CoreModule,
@@ -38,6 +36,6 @@ const env = loadEnv();
     CrmModule,
     SurveysModule,
   ],
-  providers: [{ provide: "APP_URL", useValue: env.API_URL }],
+  providers: [{ provide: "APP_URL", useFactory: () => loadEnv().API_URL }],
 })
 export class AppModule {}

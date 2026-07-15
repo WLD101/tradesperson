@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException } from "@nestjs/common";
-import { Prisma, ComponentType, MeasurementOperation } from "@prisma/client";
+import { Prisma, MeasurementOperation } from "@prisma/client";
 
 export type ComponentDimensions =
   | { type: "RECTANGLE"; length: number; width: number }

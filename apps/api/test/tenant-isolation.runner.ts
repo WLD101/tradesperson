@@ -103,6 +103,12 @@ const startServer = async () => {
   app = await NestFactory.create(AppModule, { logger: false });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.use(cookieParser());
+  app.setGlobalPrefix("api");
+  app.enableVersioning({
+    type: 1, // VersioningType.URI = 1
+    prefix: "v",
+    defaultVersion: "1",
+  });
   await app.listen(4000, "127.0.0.1");
 };
 

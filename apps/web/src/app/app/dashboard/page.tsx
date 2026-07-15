@@ -15,6 +15,9 @@ export default async function DashboardPage() {
     await apiFetch<Array<{ id: string; action: string; createdAt: string }>>(
       "/api/v1/audit-logs",
     );
+  const leads = await apiFetch<Array<{ id: string }>>("/api/v1/leads");
+  const customers = await apiFetch<Array<{ id: string }>>("/api/v1/customers");
+  const properties = await apiFetch<Array<{ id: string }>>("/api/v1/properties");
 
   return (
     <div className="grid gap-4">
@@ -38,6 +41,20 @@ export default async function DashboardPage() {
         <Card>
           <p className="text-sm text-slate-500">Members</p>
           <p className="mt-2 text-2xl font-semibold">{members.length}</p>
+        </Card>
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <p className="text-sm text-slate-500">Leads</p>
+          <p className="mt-2 text-2xl font-semibold">{leads.length}</p>
+        </Card>
+        <Card>
+          <p className="text-sm text-slate-500">Customers</p>
+          <p className="mt-2 text-2xl font-semibold">{customers.length}</p>
+        </Card>
+        <Card>
+          <p className="text-sm text-slate-500">Properties</p>
+          <p className="mt-2 text-2xl font-semibold">{properties.length}</p>
         </Card>
       </div>
       <Card>

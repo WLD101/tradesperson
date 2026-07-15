@@ -5,6 +5,10 @@ import { apiFetch, getSession } from "@/lib/api";
 
 const nav = [
   { href: "/app/dashboard", label: "Dashboard" },
+  { href: "/app/crm/leads", label: "Leads" },
+  { href: "/app/crm/customers", label: "Customers" },
+  { href: "/app/crm/sites", label: "Sites" },
+  { href: "/app/crm/surveys", label: "Surveys" },
   { href: "/app/settings/business", label: "Business" },
   { href: "/app/settings/branches", label: "Branches" },
   { href: "/app/settings/users", label: "Users" },

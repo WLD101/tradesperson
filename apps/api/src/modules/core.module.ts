@@ -6,6 +6,7 @@ import { AuthorizationService } from "../services/authorization.service";
 import { AuditService } from "../services/audit.service";
 import { RedisService } from "../services/redis.service";
 import { QueueService } from "../services/queue.service";
+import { BranchAccessService } from "../services/branch-access.service";
 
 @Global()
 @Module({
@@ -15,6 +16,7 @@ import { QueueService } from "../services/queue.service";
     TenantAccessService,
     AuthorizationService,
     AuditService,
+    BranchAccessService,
     RedisService,
     QueueService,
   ],
@@ -24,6 +26,7 @@ import { QueueService } from "../services/queue.service";
     TenantAccessService,
     AuthorizationService,
     AuditService,
+    BranchAccessService,
     RedisService,
     QueueService,
   ],

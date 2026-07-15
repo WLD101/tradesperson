@@ -17,6 +17,7 @@ import { CurrentSession } from "../shared/session.decorator";
 import { AuditService } from "../services/audit.service";
 import { PrismaService } from "../services/prisma.service";
 import { TenantAccessService } from "../services/tenant-access.service";
+import { BranchAccessService } from "../services/branch-access.service";
 
 const branchSchema = z.object({
   name: z.string().min(2),
@@ -49,6 +50,7 @@ class BranchesController {
     private readonly prisma: PrismaService,
     private readonly tenantAccess: TenantAccessService,
     private readonly audit: AuditService,
+    private readonly branchAccess: BranchAccessService,
   ) {}
 
   @Get()
@@ -59,7 +61,10 @@ class BranchesController {
   ) {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     return this.prisma.client.branch.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        ...this.branchAccess.branchWhere(session, tenantId, "id"),
+      },
       orderBy: { name: "asc" },
     });
   }
@@ -72,6 +77,7 @@ class BranchesController {
     session: Parameters<TenantAccessService["ensureTenant"]>[0],
   ) {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
+    await this.branchAccess.ensureAuthorizedBranch(session, branchId, tenantId);
     return this.prisma.client.branch.findFirstOrThrow({
       where: { id: branchId, tenantId },
     });

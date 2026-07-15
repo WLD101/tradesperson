@@ -1,0 +1,82 @@
+import { execSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Client } from "pg";
+import { PrismaClient } from "@prisma/client";
+import { ensureTestEnv } from "./test-env.ts";
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const rootDir = path.resolve(currentDir, "../../../..");
+const dbPackageDir = path.resolve(rootDir, "packages/db");
+
+const pnpmCmd = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+
+export const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: ensureTestEnv().databaseUrl,
+    },
+  },
+});
+
+const getAdminConnectionString = (databaseUrl: string) => {
+  const url = new URL(databaseUrl);
+  url.pathname = "/postgres";
+  return url.toString();
+};
+
+export const recreateTestDatabase = async () => {
+  const { databaseUrl, testDbName } = ensureTestEnv();
+  const client = new Client({
+    connectionString: getAdminConnectionString(databaseUrl!),
+  });
+
+  await client.connect();
+  await client.query(
+    `
+      SELECT pg_terminate_backend(pid)
+      FROM pg_stat_activity
+      WHERE datname = $1
+        AND pid <> pg_backend_pid()
+    `,
+    [testDbName],
+  );
+  await client.query(`DROP DATABASE IF EXISTS "${testDbName}"`);
+  await client.query(`CREATE DATABASE "${testDbName}"`);
+  await client.end();
+
+  execSync(`${pnpmCmd} exec prisma migrate deploy --schema prisma/schema.prisma`, {
+    cwd: dbPackageDir,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      DIRECT_URL: databaseUrl,
+    },
+  });
+};
+
+export const resetDatabase = async () => {
+  const rows = await prisma.$queryRaw<Array<{ tablename: string }>>`
+    SELECT tablename
+    FROM pg_tables
+    WHERE schemaname = 'public'
+      AND tablename <> '_prisma_migrations'
+  `;
+
+  if (!rows.length) {
+    return;
+  }
+
+  const tables = rows
+    .map((row) => `"public"."${row.tablename}"`)
+    .join(", ");
+
+  await prisma.$executeRawUnsafe(
+    `TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE`,
+  );
+};
+
+export const disconnectDatabase = async () => {
+  await prisma.$disconnect();
+};

@@ -14,6 +14,8 @@ import { SettingsModule } from "./settings.module";
 import { InvitationsModule } from "./invitations.module";
 import { SubscriptionsModule } from "./subscriptions.module";
 import { CoreModule } from "./core.module";
+import { CrmModule } from "./crm.module";
+import { SurveysModule } from "./surveys.module";
 
 const env = loadEnv();
 
@@ -33,6 +35,8 @@ const env = loadEnv();
     SettingsModule,
     InvitationsModule,
     SubscriptionsModule,
+    CrmModule,
+    SurveysModule,
   ],
   providers: [{ provide: "APP_URL", useValue: env.API_URL }],
 })

@@ -80,6 +80,8 @@ tests/
 
 ## Documentation
 
-- Architecture and planning docs: [docs](/C:/Users/WLD10/Documents/tradesperson%20netwok/docs)
-- Local development guide: [docs/local-development.md](/C:/Users/WLD10/Documents/tradesperson%20netwok/docs/local-development.md)
-- Development credentials: [docs/development-access.md](/C:/Users/WLD10/Documents/tradesperson%20netwok/docs/development-access.md)
+- [Flooring ERP Phase 0 Audit](./docs/16-flooring-erp-phase-0-audit.md)
+- [Flooring ERP Site and Survey Domain](./docs/17-flooring-site-survey-domain.md)
+- [Tenant Isolation & Security Model](./docs/17-tenant-isolation.md)
+- [Local development guide](./docs/local-development.md)
+- [Development credentials](./docs/development-access.md)

@@ -17,6 +17,7 @@ import { PrismaService } from "../services/prisma.service";
 import { SessionAuthService } from "../services/session-auth.service";
 import { AuditService } from "../services/audit.service";
 import { TenantAccessService } from "../services/tenant-access.service";
+import { BranchAccessService } from "../services/branch-access.service";
 
 const createTenantSchema = z.object({
   name: z.string().min(2),
@@ -50,6 +51,7 @@ class TenantsController {
     private readonly auth: SessionAuthService,
     private readonly audit: AuditService,
     private readonly tenantAccess: TenantAccessService,
+    private readonly branchAccess: BranchAccessService,
   ) {}
 
   @Get()
@@ -69,7 +71,10 @@ class TenantsController {
       where: { id: tenantId },
       include: {
         settings: true,
-        branches: { orderBy: { name: "asc" } },
+        branches: {
+          where: this.branchAccess.branchWhere(session, tenantId, "id"),
+          orderBy: { name: "asc" },
+        },
         subscriptions: { where: { status: "ACTIVE" }, include: { plan: true } },
       },
     });

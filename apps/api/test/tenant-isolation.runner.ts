@@ -12,7 +12,7 @@ import {
   signInThroughApi,
   type IsolationFixtureSet,
 } from "./helpers/tenant-fixtures";
-import { ValidationPipe } from "@nestjs/common";
+import { ValidationPipe, VersioningType } from "@nestjs/common";
 import cookieParser from "cookie-parser";
 
 type TestCase = {
@@ -105,7 +105,7 @@ const startServer = async () => {
   app.use(cookieParser());
   app.setGlobalPrefix("api");
   app.enableVersioning({
-    type: "URI" as any,
+    type: VersioningType.URI,
     prefix: "v",
     defaultVersion: "1",
   });

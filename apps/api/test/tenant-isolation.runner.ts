@@ -105,7 +105,7 @@ const startServer = async () => {
   app.use(cookieParser());
   app.setGlobalPrefix("api");
   app.enableVersioning({
-    type: 1, // VersioningType.URI = 1
+    type: "URI" as any,
     prefix: "v",
     defaultVersion: "1",
   });

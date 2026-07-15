@@ -1,0 +1,10 @@
+{
+  "extends": "../../packages/typescript-config/nest.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

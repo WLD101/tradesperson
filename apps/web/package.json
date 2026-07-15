@@ -1,0 +1,31 @@
+{
+  "name": "@tradesperson/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "lint": "eslint src --max-warnings=0",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm exec vitest run --passWithNoTests",
+    "test:e2e": "pnpm exec playwright test"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.83.0",
+    "@tradesperson/types": "workspace:*",
+    "@tradesperson/ui": "workspace:*",
+    "next": "^15.3.5",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.60.0",
+    "zod": "^4.0.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.53.2",
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

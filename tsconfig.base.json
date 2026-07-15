@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "baseUrl": ".",
+    "paths": {
+      "@tradesperson/auth/*": ["packages/auth/src/*"],
+      "@tradesperson/auth": ["packages/auth/src/index.ts"],
+      "@tradesperson/config": ["packages/config/src/index.ts"],
+      "@tradesperson/db/*": ["packages/db/src/*"],
+      "@tradesperson/db": ["packages/db/src/index.ts"],
+      "@tradesperson/ui/*": ["packages/ui/src/*"],
+      "@tradesperson/ui": ["packages/ui/src/index.ts"],
+      "@tradesperson/types": ["packages/types/src/index.ts"]
+    }
+  }
+}

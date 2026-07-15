@@ -1,0 +1,351 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REVOKED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum BranchStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum BranchType {
+  HEAD_OFFICE
+  SHOWROOM
+  WAREHOUSE
+  OFFICE
+  STORAGE
+  MOBILE_TEAM
+  OTHER
+}
+
+enum RoleScope {
+  PLATFORM
+  TENANT
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+model User {
+  id                String             @id @default(uuid()) @db.Uuid
+  email             String             @unique
+  firstName         String
+  lastName          String
+  passwordHash      String
+  status            UserStatus         @default(ACTIVE)
+  lastLoginAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  memberships       TenantMembership[]
+  sessions          AuthSession[]
+  invitationsSent   Invitation[]       @relation("InvitationCreatedByUser")
+  auditLogs         AuditLog[]         @relation("AuditActor")
+}
+
+model AuthSession {
+  id                String             @id @default(uuid()) @db.Uuid
+  userId            String             @db.Uuid
+  sessionTokenHash  String             @unique
+  activeTenantId    String?            @db.Uuid
+  activeBranchId    String?            @db.Uuid
+  expiresAt         DateTime
+  lastSeenAt        DateTime           @default(now())
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeTenant      Tenant?            @relation("ActiveSessionTenant", fields: [activeTenantId], references: [id], onDelete: SetNull)
+  activeBranch      Branch?            @relation("ActiveSessionBranch", fields: [activeBranchId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([activeTenantId])
+}
+
+model Tenant {
+  id                String                  @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String                  @unique
+  legalName         String?
+  tradingName       String?
+  status            TenantStatus            @default(ACTIVE)
+  companyNumber     String?
+  vatRegistrationNo String?
+  businessEmail     String?
+  businessPhone     String?
+  website           String?
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  postcode          String?
+  countryCode       String                  @default("GB")
+  currencyCode      String                  @default("GBP")
+  timeZone          String                  @default("Europe/London")
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  memberships       TenantMembership[]
+  sessions          AuthSession[]           @relation("ActiveSessionTenant")
+  branches          Branch[]
+  settings          TenantSetting?
+  numberSequences   NumberSequence[]
+  invitations       Invitation[]
+  subscriptions     TenantSubscription[]
+  featureOverrides  TenantFeatureOverride[]
+  auditLogs         AuditLog[]
+}
+
+model TenantMembership {
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @db.Uuid
+  userId            String             @db.Uuid
+  status            MembershipStatus   @default(INVITED)
+  isOwner           Boolean            @default(false)
+  defaultBranchId   String?            @db.Uuid
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  defaultBranch     Branch?            @relation("MembershipDefaultBranch", fields: [defaultBranchId], references: [id], onDelete: SetNull)
+  roles             MembershipRole[]
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+}
+
+model Role {
+  id                String             @id @default(uuid()) @db.Uuid
+  key               String             @unique
+  name              String
+  scope             RoleScope
+  isSystem          Boolean            @default(true)
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  permissions       RolePermission[]
+  membershipRoles   MembershipRole[]
+}
+
+model Permission {
+  id                String             @id @default(uuid()) @db.Uuid
+  key               String             @unique
+  group             String
+  description       String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  roles             RolePermission[]
+}
+
+model RolePermission {
+  roleId            String             @db.Uuid
+  permissionId      String             @db.Uuid
+  role              Role               @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission        Permission         @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model MembershipRole {
+  membershipId      String             @db.Uuid
+  roleId            String             @db.Uuid
+  assignedAt        DateTime           @default(now())
+  membership        TenantMembership   @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  role              Role               @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([membershipId, roleId])
+}
+
+model Branch {
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @db.Uuid
+  name              String
+  branchCode        String
+  type              BranchType
+  status            BranchStatus       @default(ACTIVE)
+  email             String?
+  phone             String?
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  postcode          String?
+  countryCode       String             @default("GB")
+  timeZone          String?
+  isDefault         Boolean            @default(false)
+  businessHours     Json?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  sessions          AuthSession[]      @relation("ActiveSessionBranch")
+  defaultForMembers TenantMembership[] @relation("MembershipDefaultBranch")
+
+  @@unique([tenantId, branchCode])
+  @@index([tenantId, status])
+}
+
+model TenantSetting {
+  id                  String     @id @default(uuid()) @db.Uuid
+  tenantId            String     @unique @db.Uuid
+  defaultVatBehavior  String     @default("STANDARD")
+  quoteNumberPrefix   String     @default("Q")
+  invoiceNumberPrefix String     @default("INV")
+  jobNumberPrefix     String     @default("JOB")
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  tenant              Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+}
+
+model NumberSequence {
+  id                String     @id @default(uuid()) @db.Uuid
+  tenantId          String     @db.Uuid
+  key               String
+  prefix            String
+  nextValue         Int        @default(1)
+  padding           Int        @default(5)
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  tenant            Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+}
+
+model Invitation {
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @db.Uuid
+  email             String
+  firstName         String?
+  lastName          String?
+  roleKey           String?
+  status            InvitationStatus   @default(PENDING)
+  tokenHash         String             @unique
+  expiresAt         DateTime
+  acceptedAt        DateTime?
+  createdById       String?            @db.Uuid
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  createdBy         User?              @relation("InvitationCreatedByUser", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([email])
+}
+
+model Feature {
+  id                String                 @id @default(uuid()) @db.Uuid
+  key               String                 @unique
+  name              String
+  description       String
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  planFeatures      PlanFeature[]
+  tenantOverrides   TenantFeatureOverride[]
+}
+
+model SubscriptionPlan {
+  id                String               @id @default(uuid()) @db.Uuid
+  key               String               @unique
+  name              String
+  description       String
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  features          PlanFeature[]
+  subscriptions     TenantSubscription[]
+}
+
+model PlanFeature {
+  planId            String               @db.Uuid
+  featureId         String               @db.Uuid
+  enabled           Boolean              @default(true)
+  limitValue        Int?
+  plan              SubscriptionPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  feature           Feature              @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  @@id([planId, featureId])
+}
+
+model TenantSubscription {
+  id                String               @id @default(uuid()) @db.Uuid
+  tenantId          String               @db.Uuid
+  planId            String               @db.Uuid
+  status            SubscriptionStatus   @default(ACTIVE)
+  startsAt          DateTime             @default(now())
+  endsAt            DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  tenant            Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan              SubscriptionPlan     @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, planId])
+  @@index([tenantId, status])
+}
+
+model TenantFeatureOverride {
+  id                String     @id @default(uuid()) @db.Uuid
+  tenantId          String     @db.Uuid
+  featureId         String     @db.Uuid
+  enabled           Boolean
+  limitValue        Int?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  tenant            Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  feature           Feature    @relation(fields: [featureId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, featureId])
+  @@index([tenantId])
+}
+
+model AuditLog {
+  id                String     @id @default(uuid()) @db.Uuid
+  tenantId          String?    @db.Uuid
+  actorUserId       String?    @db.Uuid
+  action            String
+  entityType        String
+  entityId          String?
+  requestId         String?
+  ipAddress         String?
+  userAgent         String?
+  source            String?
+  previousValues    Json?
+  newValues         Json?
+  createdAt         DateTime   @default(now())
+  tenant            Tenant?    @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  actorUser         User?      @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([entityType, entityId])
+}

@@ -116,18 +116,7 @@ describe("AreaCalculatorService", () => {
     ])).toThrow("Net area cannot be negative (deductions exceed additions)");
   });
 
-  test("17. Manual override without reason", () => {
-    expect(() => service.calculateComponentArea({ type: "CUSTOM", manualArea: 10, reason: "" }))
-      .toThrow("Manual overrides must include a reason.");
-  });
-
-  test("18. Manual override with permission, identity and reason", () => {
-    const result = service.calculateComponentArea({ type: "CUSTOM", manualArea: 15.5, reason: "Complex non-standard room" });
-    expect(result.toNumber()).toBe(15.5);
-    // Identity and audit logging is tested in the integration layer
-  });
-
-  test("19. Excessive input rejection", () => {
+  test("17. Excessive input rejection", () => {
     expect(() => service.calculateComponentArea({ type: "RECTANGLE", length: 5000, width: 4 }))
       .toThrow("Invalid dimension length: must be positive, finite, and reasonable (<1000)");
   });

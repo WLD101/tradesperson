@@ -8,7 +8,7 @@
     "lint": "eslint src --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm exec vitest run --passWithNoTests",
-    "test:isolation": "pnpm run build && pnpm exec tsx test/tenant-isolation.runner.ts"
+    "test:isolation": "pnpm run build && node test/run-isolation.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.3",
@@ -23,12 +23,14 @@
     "@tradesperson/db": "workspace:*",
     "@tradesperson/types": "workspace:*",
     "@tradesperson/ui": "workspace:*",
+    "bcryptjs": "^3.0.3",
     "bullmq": "^5.56.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "cookie-parser": "^1.4.7",
     "helmet": "^8.1.0",
     "ioredis": "^5.6.1",
+    "jose": "^6.2.3",
     "rxjs": "^7.8.2",
     "uuid": "^11.1.0",
     "zod": "^4.0.5"

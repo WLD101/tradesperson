@@ -1,7 +1,5 @@
 import "./helpers/test-env";
 import assert from "node:assert/strict";
-import { NestFactory } from "@nestjs/core";
-import { AppModule } from "../src/modules/app.module";
 import {
   disconnectDatabase,
   recreateTestDatabase,
@@ -12,15 +10,16 @@ import {
   signInThroughApi,
   type IsolationFixtureSet,
 } from "./helpers/tenant-fixtures";
-import { ValidationPipe, VersioningType } from "@nestjs/common";
-import cookieParser from "cookie-parser";
 
 type TestCase = {
   name: string;
   run: () => Promise<void>;
 };
 
-const baseUrl = "http://127.0.0.1:4000";
+const baseUrl = process.env.API_URL;
+if (!baseUrl) {
+  throw new Error("process.env.API_URL must be defined for isolation tests");
+}
 
 class HttpClient {
   private cookieHeader = "";
@@ -73,43 +72,21 @@ class HttpClient {
       this.cookieHeader = setCookies.map((value) => value.split(";")[0]).join("; ");
     }
 
-    const payload = await response.json();
+    const payload: any = await response.json();
     return {
       status: response.status,
-      body: payload as any,
+      body: payload.error ? payload.error : (payload.data !== undefined ? payload.data : payload),
     };
   }
 }
 
-let app: any;
 let ownerAAgent: HttpClient;
 let ownerBAgent: HttpClient;
 let branchA1Agent: HttpClient;
 let fixtures: IsolationFixtureSet;
 
 const startServer = async () => {
-  process.env.NODE_ENV = "test";
-  process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:55432/tradesperson_erp_isolation_test";
-  process.env.DIRECT_URL = "postgresql://postgres:postgres@localhost:55432/tradesperson_erp_isolation_test";
-  process.env.REDIS_URL = "redis://localhost:6379";
-  process.env.WEB_URL = "http://localhost:3000";
-  process.env.API_URL = "http://localhost:4000";
-  process.env.INTERNAL_API_URL = "http://localhost:4000";
-  process.env.AUTH_SECRET = "test-secret-value-1234567890";
-  process.env.AUTH_ISSUER = "tradesperson-net-erp-test";
-  process.env.AUTH_AUDIENCE = "tradesperson-erp-test-users";
-  process.env.COOKIE_DOMAIN = "localhost";
-  
-  app = await NestFactory.create(AppModule, { logger: false });
-  app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
-  app.use(cookieParser());
-  app.setGlobalPrefix("api");
-  app.enableVersioning({
-    type: VersioningType.URI,
-    prefix: "v",
-    defaultVersion: "1",
-  });
-  await app.listen(4000, "127.0.0.1");
+  // Server is started externally by run-isolation.mjs
 };
 
 const setupCase = async () => {
@@ -147,11 +124,11 @@ const tests: TestCase[] = [
 
       assert.equal(branches.status, 200);
       assert.deepEqual(
-        branches.body.data.map((item: { id: string }) => item.id).sort(),
+        branches.body.map((item: { id: string }) => item.id).sort(),
         [fixtures.branchA1.id, fixtures.branchA2.id].sort(),
       );
       assert.deepEqual(
-        sites.body.data.map((item: { id: string }) => item.id).sort(),
+        sites.body.map((item: { id: string }) => item.id).sort(),
         [fixtures.siteA1.id, fixtures.siteA2.id].sort(),
       );
     },
@@ -273,12 +250,92 @@ const tests: TestCase[] = [
       const comp = await ownerAAgent.post(`/api/v1/surveys/${sA.body.id}/rooms/${roomA.body.id}/components`).send({
         type: "RECTANGLE",
         dimensions: { length: 2, width: 2 }, // area should be 4
-        calculatedArea: 9999, // tampered area
+        calculatedArea: 999999, // tampered area
+        netArea: 999999,
+        grossArea: 999999,
+        wasteAdjustedArea: 999999,
       });
       
-      // Should ignore 9999 and use 4
       assert.equal(comp.status, 201);
       assert.equal(comp.body.calculatedArea, "4");
+
+      // Verify room totals are correctly calculated as 4, ignoring 999999
+      const roomCheck = await ownerAAgent.get(`/api/v1/surveys/${sA.body.id}/rooms/${roomA.body.id}`);
+      assert.equal(roomCheck.body.netArea, "4");
+    }
+  },
+  {
+    name: "CUSTOM manual area component is rejected",
+    run: async () => {
+      const sA = await ownerAAgent.post("/api/v1/surveys").send({
+        siteId: fixtures.siteA1.id,
+        customerId: fixtures.customerA1.id,
+        reference: "MANUAL-TEST",
+      });
+      const roomA = await ownerAAgent.post(`/api/v1/surveys/${sA.body.id}/rooms`).send({ name: "Living Room" });
+      
+      const comp = await ownerAAgent.post(`/api/v1/surveys/${sA.body.id}/rooms/${roomA.body.id}/components`).send({
+        type: "CUSTOM",
+        calculatedArea: 100,
+      });
+      
+      // Should reject CUSTOM type
+      assert.equal(comp.status, 400);
+    }
+  },
+  {
+    name: "tenant A cannot access tenant B components",
+    run: async () => {
+      const sB = await ownerBAgent.post("/api/v1/surveys").send({
+        siteId: fixtures.siteB1.id,
+        customerId: fixtures.customerB1.id,
+        reference: "B-COMP-TEST",
+      });
+      const roomB = await ownerBAgent.post(`/api/v1/surveys/${sB.body.id}/rooms`).send({ name: "Living Room" });
+      const compB = await ownerBAgent.post(`/api/v1/surveys/${sB.body.id}/rooms/${roomB.body.id}/components`).send({
+        type: "RECTANGLE",
+        dimensions: { length: 2, width: 2 },
+      });
+      
+      const patchRes = await ownerAAgent.patch(`/api/v1/surveys/${sB.body.id}/rooms/${roomB.body.id}/components/${compB.body.id}`).send({ notes: "Hacked" });
+      assert.equal(patchRes.status, 404);
+
+      const delRes = await ownerAAgent.delete(`/api/v1/surveys/${sB.body.id}/rooms/${roomB.body.id}/components/${compB.body.id}`);
+      assert.equal(delRes.status, 404);
+    }
+  },
+  {
+    name: "immutable survey states prevent editing or deleting",
+    run: async () => {
+      const sA = await ownerAAgent.post("/api/v1/surveys").send({
+        siteId: fixtures.siteA1.id,
+        customerId: fixtures.customerA1.id,
+        reference: "A-IMMUTABLE-TEST",
+      });
+      const sId = sA.body.id;
+      const roomA = await ownerAAgent.post(`/api/v1/surveys/${sId}/rooms`).send({ name: "Living Room" });
+      const rId = roomA.body.id;
+      const compA = await ownerAAgent.post(`/api/v1/surveys/${sId}/rooms/${rId}/components`).send({
+        type: "RECTANGLE",
+        dimensions: { length: 2, width: 2 },
+      });
+      const cId = compA.body.id;
+
+      // Make it immutable (DRAFT -> CANCELLED is allowed)
+      const statusUpdate = await ownerAAgent.patch(`/api/v1/surveys/${sId}/status`).send({ status: "CANCELLED" });
+      assert.equal(statusUpdate.status, 200, "Failed to transition to CANCELLED");
+
+      const patchRoom = await ownerAAgent.patch(`/api/v1/surveys/${sId}/rooms/${rId}`).send({ name: "New Name" });
+      assert.equal(patchRoom.status, 400);
+
+      const delRoom = await ownerAAgent.delete(`/api/v1/surveys/${sId}/rooms/${rId}`);
+      assert.equal(delRoom.status, 400);
+
+      const patchComp = await ownerAAgent.patch(`/api/v1/surveys/${sId}/rooms/${rId}/components/${cId}`).send({ notes: "New Note" });
+      assert.equal(patchComp.status, 400);
+
+      const delComp = await ownerAAgent.delete(`/api/v1/surveys/${sId}/rooms/${rId}/components/${cId}`);
+      assert.equal(delComp.status, 400);
     }
   }
 ];
@@ -287,8 +344,11 @@ const main = async () => {
   const startedAt = Date.now();
   let failed = 0;
 
-  await recreateTestDatabase();
-  await startServer();
+  if (process.argv.includes("--no-recreate")) {
+    await resetDatabase();
+  } else {
+    await recreateTestDatabase();
+  }
 
   for (const test of tests) {
     await setupCase();
@@ -302,7 +362,6 @@ const main = async () => {
     }
   }
 
-  await app.close();
   await disconnectDatabase();
 
   const passed = tests.length - failed;

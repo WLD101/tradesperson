@@ -10,8 +10,7 @@ export type ComponentDimensions =
   | { type: "COLUMN"; length: number; width: number }
   | { type: "STAIR"; width: number; tread: number; riser: number; count: number }
   | { type: "LANDING"; length: number; width: number }
-  | { type: "CORRIDOR"; length: number; width: number }
-  | { type: "CUSTOM"; manualArea: number; reason: string };
+  | { type: "CORRIDOR"; length: number; width: number };
 
 @Injectable()
 export class AreaCalculatorService {
@@ -52,12 +51,7 @@ export class AreaCalculatorService {
         return new Prisma.Decimal(dimensions.width)
           .mul(new Prisma.Decimal(dimensions.tread).add(new Prisma.Decimal(dimensions.riser)))
           .mul(new Prisma.Decimal(dimensions.count));
-      case "CUSTOM":
-        this.validatePositive(dimensions.manualArea, "manualArea");
-        if (!dimensions.reason || dimensions.reason.trim().length === 0) {
-          throw new BadRequestException("Manual overrides must include a reason.");
-        }
-        return new Prisma.Decimal(dimensions.manualArea);
+
       default:
         throw new BadRequestException("Unsupported shape for area calculation.");
     }

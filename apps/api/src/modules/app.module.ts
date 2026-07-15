@@ -36,6 +36,6 @@ import { SurveysModule } from "./surveys.module";
     CrmModule,
     SurveysModule,
   ],
-  providers: [{ provide: "APP_URL", useFactory: () => loadEnv().API_URL }],
+  providers: [{ provide: "APP_URL", useValue: loadEnv().API_URL }],
 })
 export class AppModule {}

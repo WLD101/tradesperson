@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Module,
   Param,
@@ -180,10 +181,22 @@ class SurveyRoomsController {
     const input = roomSchema.partial().parse(body);
     return this.surveysService.updateRoom(tenantId, session.user.id, surveyId, roomId, input);
   }
+
+  @Delete(":roomId")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("sites.manage")
+  async deleteRoom(
+    @Param("surveyId") surveyId: string,
+    @Param("roomId") roomId: string,
+    @CurrentSession() session: TenantSession,
+  ) {
+    const { tenantId } = this.tenantAccess.ensureTenant(session);
+    return this.surveysService.deleteRoom(tenantId, session.user.id, surveyId, roomId);
+  }
 }
 
 const componentSchema = z.object({
-  type: z.enum(["RECTANGLE", "TRIANGLE", "CIRCLE", "SEMICIRCLE", "ALCOVE", "COLUMN", "STAIR", "LANDING", "CORRIDOR", "CUSTOM"]),
+  type: z.enum(["RECTANGLE", "TRIANGLE", "CIRCLE", "SEMICIRCLE", "ALCOVE", "COLUMN", "STAIR", "LANDING", "CORRIDOR"]),
   operation: z.enum(["ADD", "DEDUCT"]).optional(),
   dimensions: z.any(), // Further validated in AreaCalculatorService
   notes: z.string().optional(),
@@ -208,18 +221,36 @@ class MeasurementComponentsController {
   ) {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const input = componentSchema.parse(body);
-    
-    // Server calculates authoritative area based on validated dimensions
-    // Wait, the client should not be trusted for area calculation
-    const dimensions = input.dimensions as any;
-    dimensions.type = input.type;
-    const calculatedArea = this.calculator.calculateComponentArea(dimensions);
+    // Authoritative area is computed in the service.
+    return this.surveysService.addMeasurement(tenantId, session.user.id, surveyId, roomId, input);
+  }
 
-    const data = {
-      ...input,
-      calculatedArea,
-    };
-    return this.surveysService.addMeasurement(tenantId, session.user.id, surveyId, roomId, data);
+  @Patch(":componentId")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("sites.manage")
+  async updateComponent(
+    @Param("surveyId") surveyId: string,
+    @Param("roomId") roomId: string,
+    @Param("componentId") componentId: string,
+    @Body() body: unknown,
+    @CurrentSession() session: TenantSession,
+  ) {
+    const { tenantId } = this.tenantAccess.ensureTenant(session);
+    const input = componentSchema.partial().parse(body);
+    return this.surveysService.updateMeasurement(tenantId, session.user.id, surveyId, roomId, componentId, input);
+  }
+
+  @Delete(":componentId")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("sites.manage")
+  async deleteComponent(
+    @Param("surveyId") surveyId: string,
+    @Param("roomId") roomId: string,
+    @Param("componentId") componentId: string,
+    @CurrentSession() session: TenantSession,
+  ) {
+    const { tenantId } = this.tenantAccess.ensureTenant(session);
+    return this.surveysService.deleteMeasurement(tenantId, session.user.id, surveyId, roomId, componentId);
   }
 }
 

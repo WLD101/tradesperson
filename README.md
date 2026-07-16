@@ -86,6 +86,7 @@ tests/
 - [Open-Source Acceleration Register](./docs/18-open-source-acceleration-register.md)
 - [Product Catalogue Phase A Proposal](./docs/19-product-catalogue-phase-a-proposal.md)
 - [Flooring Product Catalogue Domain](./docs/20-flooring-product-catalogue-domain.md)
+- [Flooring Supplier Domain Foundation](./docs/21-flooring-supplier-domain.md)
 - [Local development guide](./docs/local-development.md)
 - [Development credentials](./docs/development-access.md)
 
@@ -98,4 +99,10 @@ tests/
   - API CRUD for categories, manufacturers, brands, collections, units, products, and variants
   - functional catalogue management screens in the web app
   - tenant-isolation and category-rule validation coverage
+- Supplier Domain Phase B now includes:
+  - tenant-owned supplier, contact, and supplier-product models plus migration
+  - supplier permissions and demo seed data
+  - API CRUD for suppliers, contacts, supplier product links, and product-side supplier lookup
+  - functional supplier list, create, edit, and detail pages in the web app
+  - tenant-isolation coverage for supplier retrieval, creation, permissions, and cross-tenant product linking
 - Final UI branding remains deferred. Current catalogue screens are intentionally functional and replaceable.

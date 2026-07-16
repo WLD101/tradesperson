@@ -164,8 +164,10 @@ Open-source packages provide infrastructure only. Tenant isolation, branch permi
 - No public/shared platform catalogue model yet
 
 ## Supplier-Pricing Dependency
-The next catalogue-related data phase is:
-Suppliers -> supplier products -> price lists -> price history -> CSV/XLSX import preview and validation.
+The catalogue dependency chain is now:
+Supplier master data and supplier-product links -> price lists -> price history -> CSV/XLSX import preview and validation.
+
+Supplier master data and supplier-product linking are now implemented as the verified Phase B foundation. Commercial pricing, landed-cost logic, and spreadsheet import workflows remain deferred.
 
 ## Estimation Dependency
 Estimate and quotation pricing must consume the catalogue only after supplier pricing and price history are implemented safely. Phase A intentionally stops short of estimate pricing logic.

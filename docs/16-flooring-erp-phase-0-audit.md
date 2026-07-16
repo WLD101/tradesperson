@@ -34,6 +34,7 @@ Status labels used in this document:
   - `20260715120000_phase_2_crm_foundation`
   - `20260715130000_phase_3_survey_foundation`
   - `20260716085626_phase_4_catalogue_foundation`
+  - `20260716165544_phase_5_supplier_foundation`
 - Web application exists for:
   - sign-in
   - tenant selection
@@ -45,6 +46,7 @@ Status labels used in this document:
   - subscription
   - CRM pages for leads, customers, sites, and surveys
   - catalogue management pages for categories, manufacturers, brands, collections, units, products, and variants
+  - supplier management pages for suppliers, contacts, and supplier product links
 - Seed data exists for demo tenant, memberships, invitations, CRM data, survey data, and fictional UK flooring catalogue examples.
 - CI workflow exists in `.github/workflows/ci.yml` and runs lint, typecheck, unit tests, and tenant-isolation integration tests.
 - Workspace validation currently passes:
@@ -66,11 +68,12 @@ Status labels used in this document:
 - API modules are functional, but current implementation is controller-heavy and does not yet follow the target repository pattern of domain services, repositories, policies, and explicit workflow services.
 - Web UX is functional for admin and basic CRM entry, but not yet aligned to the full task-focused flooring workflow.
 - Tests now cover catalogue validation rules, survey area calculations, and tenant-isolation scenarios across branches, CRM, surveys, and catalogue records, but they still do not yet cover:
+- Tests now cover catalogue validation rules, survey area calculations, and tenant-isolation scenarios across branches, CRM, surveys, catalogue records, and supplier-domain cross-tenant access, but they still do not yet cover:
   - financial rules
   - stock concurrency
   - end-to-end flooring journeys
 - Survey domain (Survey, Rooms, Measurements) exists and is verified, but it is still missing photos, signatures, appointments, and mobile/offline capabilities.
-- Product Catalogue Phase A exists and is verified, but supplier pricing, imports, and document/image uploads remain deferred.
+- Product Catalogue Phase A exists and is verified, and Supplier Domain Phase B now exists as a verified foundation, but supplier pricing, imports, purchasing workflows, and document/image uploads remain deferred.
 
 ### Missing
 
@@ -80,7 +83,7 @@ Status labels used in this document:
 - Estimation engine and quantity strategies by flooring type
 - Quote versions, acceptance evidence, deposit handling
 - Contracts, sales orders, jobs, scheduling, fitters, subcontractors
-- Suppliers, purchasing, warehouses, inventory, roll cutting, remnants
+- Purchasing, warehouses, inventory, roll cutting, remnants
 - Invoicing, payments, VAT decision records, CIS workflows
 - Document service, storage workflows, malware scanning, signature evidence
 - Customer, supplier, and subcontractor portals
@@ -95,7 +98,7 @@ Status labels used in this document:
 - Phase 1 Platform foundation: `Existing and verified`
 - Phase 2 Flooring CRM and surveys: `Existing and verified`
 - Phase 3 Catalogue, estimating and quotations: `Existing but incomplete`
-- Phase 4 Procurement and stock: `Missing`
+- Phase 4 Procurement and stock: `Existing but incomplete`
 - Phase 5 Jobs and fitting: `Missing`
 - Phase 6 Finance and compliance: `Missing`
 - Phase 7 Portals and automation: `Missing`
@@ -148,7 +151,7 @@ Status labels used in this document:
 | Contracts | Missing | No contract model |
 | Sales orders | Missing | No conversion workflow |
 | Purchasing | Missing | No requisitions, POs, receipts |
-| Suppliers | Missing | No supplier domain |
+| Suppliers | Existing but incomplete | Supplier master data, contacts, and supplier-product links now exist; pricing and purchasing do not |
 | Inventory | Missing | No warehouses, stock items, rolls, remnants |
 | Jobs | Missing | No job lifecycle |
 | Scheduling | Missing | No calendar or assignments |
@@ -208,6 +211,11 @@ Status labels used in this document:
 - `catalogue.archive`
 - `catalogue.import`
 - `catalogue.documents.manage`
+- `suppliers.view`
+- `suppliers.manage`
+- `suppliers.archive`
+- `suppliers.contacts.manage`
+- `suppliers.products.manage`
 
 ### Proposed next permission groups
 
@@ -408,6 +416,10 @@ flowchart LR
 - `/api/v1/leads`
 - `/api/v1/customers`
 - `/api/v1/properties`
+- `/api/v1/suppliers`
+- `/api/v1/suppliers/:supplierId/contacts`
+- `/api/v1/suppliers/:supplierId/products`
+- `/api/v1/catalogue/products/:productId/suppliers`
 
 ### Proposed next endpoints
 
@@ -502,7 +514,7 @@ Status: `Missing`
 
 ### Existing but incomplete
 
-- tenant isolation is application-enforced but not yet proven by integration tests
+- tenant isolation is application-enforced and now proven by integration tests across CRM, surveys, catalogue, and supplier foundations
 - no malware scanning flow for uploads
 - no secrets rotation or production security documentation
 - no branch-restricted policy matrix tests
@@ -565,6 +577,9 @@ Status: `Missing`
 
 - survey lifecycle
 - room measurement
+- supplier master data
+- supplier contacts
+- supplier to product linking
 - flooring quantity calculations
 - quote issue and acceptance
 - deposit collection

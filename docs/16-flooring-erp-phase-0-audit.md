@@ -1,6 +1,6 @@
 # Flooring ERP Phase 0 Audit
 
-Date: 2026-07-15
+Date: 2026-07-16
 
 Scope: repository audit and gap analysis for the UK multi-tenant Tradesperson Network Flooring ERP.
 
@@ -32,6 +32,8 @@ Status labels used in this document:
 - Prisma migrations exist for:
   - `20260711175620_phase_1_foundation`
   - `20260715120000_phase_2_crm_foundation`
+  - `20260715130000_phase_3_survey_foundation`
+  - `20260716085626_phase_4_catalogue_foundation`
 - Web application exists for:
   - sign-in
   - tenant selection
@@ -41,37 +43,40 @@ Status labels used in this document:
   - users
   - roles
   - subscription
-  - CRM foundation pages for leads, customers, and properties
-- Seed data exists for demo tenant, memberships, invitations, and baseline CRM data.
+  - CRM pages for leads, customers, sites, and surveys
+  - catalogue management pages for categories, manufacturers, brands, collections, units, products, and variants
+- Seed data exists for demo tenant, memberships, invitations, CRM data, survey data, and fictional UK flooring catalogue examples.
+- CI workflow exists in `.github/workflows/ci.yml` and runs lint, typecheck, unit tests, and tenant-isolation integration tests.
 - Workspace validation currently passes:
   - `pnpm db:generate`
   - `pnpm typecheck`
   - `pnpm test`
   - `pnpm lint`
+  - `pnpm test:isolation`
 
 ### Existing but incomplete
 
 - CRM exists only as a foundation:
   - leads
   - customers
-  - properties
+  - sites
   - simple lead conversion
 - Audit exists, but not yet at the full operational event depth required by flooring, finance, stock, and compliance.
 - Permissions exist, but they are not yet threshold-aware, branch-policy-rich, or finance-sensitive.
 - API modules are functional, but current implementation is controller-heavy and does not yet follow the target repository pattern of domain services, repositories, policies, and explicit workflow services.
 - Web UX is functional for admin and basic CRM entry, but not yet aligned to the full task-focused flooring workflow.
-- Tests exist, but are limited to a few unit tests and do not yet cover:
-  - CRM transitions
+- Tests now cover catalogue validation rules, survey area calculations, and tenant-isolation scenarios across branches, CRM, surveys, and catalogue records, but they still do not yet cover:
   - financial rules
   - stock concurrency
   - end-to-end flooring journeys
-- Survey domain (Survey, Rooms, Measurements) exists, but missing photos, signatures, and mobile/offline capabilities.
+- Survey domain (Survey, Rooms, Measurements) exists and is verified, but it is still missing photos, signatures, appointments, and mobile/offline capabilities.
+- Product Catalogue Phase A exists and is verified, but supplier pricing, imports, and document/image uploads remain deferred.
 
 ### Missing
 
 - Customer contacts and communication history
 - Tasks, reminders, activity log, duplicate detection, saved filters
-- Flooring product catalogue and price history
+- Flooring price history
 - Estimation engine and quantity strategies by flooring type
 - Quote versions, acceptance evidence, deposit handling
 - Contracts, sales orders, jobs, scheduling, fitters, subcontractors
@@ -80,7 +85,6 @@ Status labels used in this document:
 - Document service, storage workflows, malware scanning, signature evidence
 - Customer, supplier, and subcontractor portals
 - Reporting module
-- CI workflow in `.github`
 - RLS or equivalent database-level tenant enforcement
 
 ## 2. Gap Analysis
@@ -88,9 +92,9 @@ Status labels used in this document:
 ### Current completion by phase
 
 - Phase 0 Repository and requirements audit: `Existing but incomplete`
-- Phase 1 Platform foundation: `Existing but incomplete`
+- Phase 1 Platform foundation: `Existing and verified`
 - Phase 2 Flooring CRM and surveys: `Existing and verified`
-- Phase 3 Catalogue, estimating and quotations: `Missing`
+- Phase 3 Catalogue, estimating and quotations: `Existing but incomplete`
 - Phase 4 Procurement and stock: `Missing`
 - Phase 5 Jobs and fitting: `Missing`
 - Phase 6 Finance and compliance: `Missing`
@@ -109,7 +113,7 @@ Status labels used in this document:
 
 - The repo is ahead on foundation compared with original docs, but requirements traceability is behind.
 - Recent CRM work is useful, but it is still below the flooring-specific definition of done from the brief.
-- Without tenant-isolation tests and stronger domain boundaries, continuing feature work will increase rework later.
+- The tenant-isolation suite now materially reduces branch and cross-tenant leakage risk, but database-level tenant enforcement is still absent.
 
 ## 3. Final Module Map
 
@@ -132,12 +136,12 @@ Status labels used in this document:
 
 | Module | Status | Notes |
 | --- | --- | --- |
-| CRM | Existing but incomplete | Leads/customers/properties only |
+| CRM | Existing but incomplete | Leads/customers/sites, simple conversion, no tasks/contacts/history |
 | Customers | Existing but incomplete | No contacts, balances, consent, history |
-| Sites | Missing | Properties exist, but full site model does not |
-| Surveys | Missing | No appointment or measurement workflow |
-| Measurements | Missing | No room or area model |
-| Product catalogue | Missing | No product domain yet |
+| Sites | Existing and verified | Site model mapped over legacy property table with site CRUD UI |
+| Surveys | Existing and verified | Survey lifecycle, room management, and locking rules present |
+| Measurements | Existing and verified | Server-authoritative area calculations and component CRUD present |
+| Product catalogue | Existing and verified | Phase A tenant-owned catalogue domain and functional UI present |
 | Pricing | Missing | No price history or rules |
 | Estimates | Missing | No estimate model or engine |
 | Quotations | Missing | No quote versions or acceptance |
@@ -197,6 +201,13 @@ Status labels used in this document:
 - `customers.manage`
 - `properties.view`
 - `properties.manage`
+- `sites.view`
+- `sites.manage`
+- `catalogue.view`
+- `catalogue.manage`
+- `catalogue.archive`
+- `catalogue.import`
+- `catalogue.documents.manage`
 
 ### Proposed next permission groups
 

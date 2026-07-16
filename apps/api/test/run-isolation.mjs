@@ -65,18 +65,20 @@ async function main() {
   process.env.MAIL_FROM = process.env.MAIL_FROM || "noreply@example.com";
 
   const port = await getAvailablePort();
-  const apiUrl = `http://localhost:${port}`;
+  const apiHost = "127.0.0.1";
+  const apiUrl = `http://${apiHost}:${port}`;
   
   process.env.PORT = port.toString();
   process.env.API_URL = apiUrl;
   process.env.INTERNAL_API_URL = apiUrl;
+  const apiEnv = { ...process.env };
 
   console.log(`[runner] Using test port ${port}`);
 
   let apiProcess;
   try {
     console.log(`[runner] Resetting test database using real migrations...`);
-    const dbReset = spawn("pnpm", ["--filter", "@tradesperson/db", "exec", "prisma", "migrate", "reset", "--force", "--skip-generate"], { stdio: "inherit", shell: true });
+    const dbReset = spawn("pnpm", ["--filter", "@tradesperson/db", "exec", "prisma", "migrate", "reset", "--force", "--skip-generate"], { stdio: "inherit", shell: true, env: apiEnv });
     await new Promise((res, rej) => {
       dbReset.on("close", code => {
         if (code === 0) res();
@@ -88,7 +90,7 @@ async function main() {
     let generated = false;
     let generateRetries = 0;
     while (!generated && generateRetries < 5) {
-      const dbGen = spawn("pnpm", ["--filter", "@tradesperson/db", "exec", "prisma", "generate"], { stdio: "inherit", shell: true });
+      const dbGen = spawn("pnpm", ["--filter", "@tradesperson/db", "exec", "prisma", "generate"], { stdio: "inherit", shell: true, env: apiEnv });
       const code = await new Promise((res) => {
         dbGen.on("close", res);
       });
@@ -107,12 +109,19 @@ async function main() {
     
     apiProcess = spawn("node", [entrypoint], {
       stdio: "inherit",
-      env: process.env,
+      env: apiEnv,
     });
 
     apiProcess.on("error", (err) => {
       console.error("[runner] API process failed to start", err);
       process.exit(1);
+    });
+    apiProcess.on("exit", (code, signal) => {
+      if (code !== null && code !== 0) {
+        console.error(`[runner] API process exited early with code ${code}`);
+      } else if (signal) {
+        console.error(`[runner] API process exited early with signal ${signal}`);
+      }
     });
 
     console.log(`[runner] Waiting for API health...`);
@@ -121,7 +130,7 @@ async function main() {
     console.log(`[runner] API is healthy. Starting isolation suite...`);
     const runner = spawn("pnpm", ["exec", "tsx", "test/tenant-isolation.runner.ts", "--no-recreate"], {
       stdio: "inherit",
-      env: process.env,
+      env: apiEnv,
       shell: true,
     });
 

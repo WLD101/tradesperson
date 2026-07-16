@@ -85,6 +85,7 @@ class HttpClient {
 let ownerAAgent: HttpClient;
 let ownerBAgent: HttpClient;
 let branchA1Agent: HttpClient;
+let staffAAgent: HttpClient;
 let fixtures: IsolationFixtureSet;
 
 const startServer = async () => {
@@ -97,9 +98,11 @@ const setupCase = async () => {
   ownerAAgent = new HttpClient(baseUrl);
   ownerBAgent = new HttpClient(baseUrl);
   branchA1Agent = new HttpClient(baseUrl);
+  staffAAgent = new HttpClient(baseUrl);
   await signInThroughApi(ownerAAgent, fixtures.ownerA.user.email);
   await signInThroughApi(ownerBAgent, fixtures.ownerB.user.email);
   await signInThroughApi(branchA1Agent, fixtures.branchUserA1.user.email);
+  await signInThroughApi(staffAAgent, fixtures.staffA.user.email);
 };
 
 const tests: TestCase[] = [
@@ -113,7 +116,7 @@ const tests: TestCase[] = [
   {
     name: "tenant-owned list endpoints exclude tenant B records",
     run: async () => {
-      const [branches, memberships, invitations, auditLogs, leads, customers, sites] =
+      const [branches, memberships, invitations, auditLogs, leads, customers, sites, products] =
         await Promise.all([
           ownerAAgent.get("/api/v1/branches"),
           ownerAAgent.get(`/api/v1/tenants/${fixtures.tenantA.id}/memberships`),
@@ -122,6 +125,7 @@ const tests: TestCase[] = [
           ownerAAgent.get("/api/v1/leads"),
           ownerAAgent.get("/api/v1/customers"),
           ownerAAgent.get("/api/v1/sites"),
+          ownerAAgent.get("/api/v1/catalogue/products"),
         ]);
 
       assert.equal(branches.status, 200);
@@ -132,6 +136,10 @@ const tests: TestCase[] = [
       assert.deepEqual(
         sites.body.map((item: { id: string }) => item.id).sort(),
         [fixtures.siteA1.id, fixtures.siteA2.id].sort(),
+      );
+      assert.deepEqual(
+        products.body.items.map((item: { id: string }) => item.id).sort(),
+        [fixtures.productA.id].sort(),
       );
     },
   },
@@ -182,6 +190,95 @@ const tests: TestCase[] = [
       
       const response = await ownerAAgent.get(`/api/v1/surveys/${sB.body.id}`);
       assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot retrieve tenant B product",
+    run: async () => {
+      const response = await ownerAAgent.get(
+        `/api/v1/catalogue/products/${fixtures.productB.id}`,
+      );
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot create product using tenant B references",
+    run: async () => {
+      const response = await ownerAAgent.post("/api/v1/catalogue/products").send({
+        product: {
+          categoryId: fixtures.categoryB.id,
+          manufacturerId: fixtures.manufacturerB.id,
+          primaryUnitId: fixtures.unitB.id,
+          name: "Cross Tenant Product",
+          slug: "cross-tenant-product",
+          sku: "X-TENANT-001",
+        },
+        initialVariant: {
+          name: "Default",
+          sku: "X-TENANT-001-DEF",
+        },
+      });
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot update tenant B product",
+    run: async () => {
+      const response = await ownerAAgent
+        .patch(`/api/v1/catalogue/products/${fixtures.productB.id}`)
+        .send({ name: "Hacked Product" });
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot archive tenant B product",
+    run: async () => {
+      const response = await ownerAAgent.patch(
+        `/api/v1/catalogue/products/${fixtures.productB.id}/archive`,
+      ).send({});
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "catalogue manage requires explicit permission",
+    run: async () => {
+      const response = await staffAAgent.post("/api/v1/catalogue/products").send({
+        product: {
+          categoryId: fixtures.categoryA.id,
+          manufacturerId: fixtures.manufacturerA.id,
+          primaryUnitId: fixtures.unitA.id,
+          name: "Staff Restricted Product",
+          slug: "staff-restricted-product",
+          sku: "STAFF-001",
+        },
+        initialVariant: {
+          name: "Default",
+          sku: "STAFF-001-DEF",
+        },
+      });
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "catalogue archive hides products by default",
+    run: async () => {
+      const archived = await ownerAAgent.patch(
+        `/api/v1/catalogue/products/${fixtures.productA.id}/archive`,
+      ).send({});
+      assert.equal(archived.status, 200);
+
+      const defaultList = await ownerAAgent.get("/api/v1/catalogue/products");
+      assert.equal(defaultList.status, 200);
+      assert.equal(defaultList.body.items.length, 0);
+
+      const archivedList = await ownerAAgent.get(
+        "/api/v1/catalogue/products?includeArchived=true",
+      );
+      assert.equal(archivedList.status, 200);
+      assert.deepEqual(
+        archivedList.body.items.map((item: { id: string }) => item.id),
+        [fixtures.productA.id],
+      );
     },
   },
   {

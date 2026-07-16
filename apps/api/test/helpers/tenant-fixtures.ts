@@ -5,11 +5,15 @@ import type {
   Invitation,
   Lead,
   Permission,
+  Product,
+  ProductCategory,
+  Manufacturer,
   Site,
   Role,
   SubscriptionPlan,
   Tenant,
   TenantMembership,
+  UnitOfMeasure,
   User,
 } from "@prisma/client";
 import { prisma } from "./test-db";
@@ -26,6 +30,9 @@ const permissions = [
   ["roles.view", "Administration", "View roles and permissions"],
   ["subscriptions.view", "Administration", "View subscription details"],
   ["audit.view", "Administration", "View audit activity"],
+  ["catalogue.view", "Catalogue", "View product catalogue records"],
+  ["catalogue.manage", "Catalogue", "Create and update catalogue records"],
+  ["catalogue.archive", "Catalogue", "Archive and restore catalogue records"],
   ["leads.view", "CRM", "View leads"],
   ["leads.manage", "CRM", "Create and update leads"],
   ["customers.view", "CRM", "View customers"],
@@ -43,6 +50,9 @@ const rolePermissions = {
     "users.view",
     "roles.view",
     "audit.view",
+    "catalogue.view",
+    "catalogue.manage",
+    "catalogue.archive",
     "leads.view",
     "leads.manage",
     "customers.view",
@@ -52,7 +62,7 @@ const rolePermissions = {
     "sites.view",
     "sites.manage",
   ],
-  STAFF: ["branches.view", "leads.view", "customers.view", "sites.view"],
+  STAFF: ["branches.view", "catalogue.view", "leads.view", "customers.view", "sites.view"],
 } as const;
 
 type MembershipWithUser = TenantMembership & { user: User };
@@ -66,6 +76,7 @@ export type IsolationFixtureSet = {
   ownerA: MembershipWithUser;
   ownerB: MembershipWithUser;
   branchUserA1: MembershipWithUser;
+  staffA: MembershipWithUser;
   customerA1: Customer;
   customerA2: Customer;
   customerB1: Customer;
@@ -75,6 +86,14 @@ export type IsolationFixtureSet = {
   leadA1: Lead;
   leadA2: Lead;
   leadB1: Lead;
+  categoryA: ProductCategory;
+  categoryB: ProductCategory;
+  manufacturerA: Manufacturer;
+  manufacturerB: Manufacturer;
+  unitA: UnitOfMeasure;
+  unitB: UnitOfMeasure;
+  productA: Product;
+  productB: Product;
   invitationA: Invitation;
   invitationB: Invitation;
   subscriptionPlan: SubscriptionPlan;
@@ -274,7 +293,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
     }),
   ]);
 
-  const [ownerAUser, ownerBUser, branchUser] = await Promise.all([
+  const [ownerAUser, ownerBUser, branchUser, staffUser] = await Promise.all([
     createUser({
       email: "owner-a@example.test",
       firstName: "Olivia",
@@ -289,6 +308,11 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
       email: "branch-a1@example.test",
       firstName: "Brenda",
       lastName: "Branch",
+    }),
+    createUser({
+      email: "staff-a@example.test",
+      firstName: "Sophie",
+      lastName: "Staff",
     }),
   ]);
 
@@ -321,10 +345,20 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
     },
     include: { user: true },
   });
+  const staffA = await prisma.tenantMembership.create({
+    data: {
+      tenantId: tenantA.id,
+      userId: staffUser.id,
+      status: "ACTIVE",
+      defaultBranchId: branchA1.id,
+    },
+    include: { user: true },
+  });
 
   await attachMembershipRole(ownerA.id, businessOwnerRole);
   await attachMembershipRole(ownerB.id, businessOwnerRole);
   await attachMembershipRole(branchUserA1.id, branchManagerRole);
+  await attachMembershipRole(staffA.id, staffRole);
 
   const [customerA1, customerA2, customerB1] = await Promise.all([
     prisma.customer.create({
@@ -416,6 +450,84 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
     }),
   ]);
 
+  const [categoryA, categoryB] = await Promise.all([
+    prisma.productCategory.create({
+      data: {
+        tenantId: tenantA.id,
+        name: "Carpet",
+        slug: "carpet",
+      },
+    }),
+    prisma.productCategory.create({
+      data: {
+        tenantId: tenantB.id,
+        name: "LVT",
+        slug: "lvt",
+      },
+    }),
+  ]);
+
+  const [manufacturerA, manufacturerB] = await Promise.all([
+    prisma.manufacturer.create({
+      data: {
+        tenantId: tenantA.id,
+        name: "Tenant A Mills",
+        slug: "tenant-a-mills",
+      },
+    }),
+    prisma.manufacturer.create({
+      data: {
+        tenantId: tenantB.id,
+        name: "Tenant B Mills",
+        slug: "tenant-b-mills",
+      },
+    }),
+  ]);
+
+  const [unitA, unitB] = await Promise.all([
+    prisma.unitOfMeasure.create({
+      data: {
+        tenantId: tenantA.id,
+        code: "ROLL",
+        name: "Roll",
+        kind: "ROLL",
+      },
+    }),
+    prisma.unitOfMeasure.create({
+      data: {
+        tenantId: tenantB.id,
+        code: "PACK",
+        name: "Pack",
+        kind: "PACK",
+      },
+    }),
+  ]);
+
+  const [productA, productB] = await Promise.all([
+    prisma.product.create({
+      data: {
+        tenantId: tenantA.id,
+        categoryId: categoryA.id,
+        manufacturerId: manufacturerA.id,
+        primaryUnitId: unitA.id,
+        name: "Tenant A Carpet",
+        slug: "tenant-a-carpet",
+        sku: "A-CARPET-001",
+      },
+    }),
+    prisma.product.create({
+      data: {
+        tenantId: tenantB.id,
+        categoryId: categoryB.id,
+        manufacturerId: manufacturerB.id,
+        primaryUnitId: unitB.id,
+        name: "Tenant B LVT",
+        slug: "tenant-b-lvt",
+        sku: "B-LVT-001",
+      },
+    }),
+  ]);
+
   const [invitationA, invitationB] = await Promise.all([
     prisma.invitation.create({
       data: {
@@ -467,6 +579,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
     ownerA,
     ownerB,
     branchUserA1,
+    staffA,
     customerA1,
     customerA2,
     customerB1,
@@ -476,6 +589,14 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
     leadA1,
     leadA2,
     leadB1,
+    categoryA,
+    categoryB,
+    manufacturerA,
+    manufacturerB,
+    unitA,
+    unitB,
+    productA,
+    productB,
     invitationA,
     invitationB,
     subscriptionPlan,

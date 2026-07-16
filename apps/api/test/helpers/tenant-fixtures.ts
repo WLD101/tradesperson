@@ -4,6 +4,9 @@ import type {
   Customer,
   Invitation,
   Lead,
+  Supplier,
+  SupplierContact,
+  SupplierProduct,
   Permission,
   Product,
   ProductCategory,
@@ -33,6 +36,11 @@ const permissions = [
   ["catalogue.view", "Catalogue", "View product catalogue records"],
   ["catalogue.manage", "Catalogue", "Create and update catalogue records"],
   ["catalogue.archive", "Catalogue", "Archive and restore catalogue records"],
+  ["suppliers.view", "Suppliers", "View supplier records"],
+  ["suppliers.manage", "Suppliers", "Create and update supplier records"],
+  ["suppliers.archive", "Suppliers", "Archive and restore supplier records"],
+  ["suppliers.contacts.manage", "Suppliers", "Manage supplier contacts"],
+  ["suppliers.products.manage", "Suppliers", "Manage supplier product links"],
   ["leads.view", "CRM", "View leads"],
   ["leads.manage", "CRM", "Create and update leads"],
   ["customers.view", "CRM", "View customers"],
@@ -53,6 +61,11 @@ const rolePermissions = {
     "catalogue.view",
     "catalogue.manage",
     "catalogue.archive",
+    "suppliers.view",
+    "suppliers.manage",
+    "suppliers.archive",
+    "suppliers.contacts.manage",
+    "suppliers.products.manage",
     "leads.view",
     "leads.manage",
     "customers.view",
@@ -62,7 +75,14 @@ const rolePermissions = {
     "sites.view",
     "sites.manage",
   ],
-  STAFF: ["branches.view", "catalogue.view", "leads.view", "customers.view", "sites.view"],
+  STAFF: [
+    "branches.view",
+    "catalogue.view",
+    "suppliers.view",
+    "leads.view",
+    "customers.view",
+    "sites.view",
+  ],
 } as const;
 
 type MembershipWithUser = TenantMembership & { user: User };
@@ -94,6 +114,12 @@ export type IsolationFixtureSet = {
   unitB: UnitOfMeasure;
   productA: Product;
   productB: Product;
+  supplierA: Supplier;
+  supplierB: Supplier;
+  supplierContactA: SupplierContact;
+  supplierContactB: SupplierContact;
+  supplierProductA: SupplierProduct;
+  supplierProductB: SupplierProduct;
   invitationA: Invitation;
   invitationB: Invitation;
   subscriptionPlan: SubscriptionPlan;
@@ -528,6 +554,83 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
     }),
   ]);
 
+  const [supplierA, supplierB] = await Promise.all([
+    prisma.supplier.create({
+      data: {
+        tenantId: tenantA.id,
+        branchId: branchA1.id,
+        legalName: "Supplier A Ltd",
+        tradingName: "Supplier A",
+        supplierCode: "SUP-A-001",
+        email: "supplier-a@example.test",
+        telephone: "01611234567",
+        countryCode: "GB",
+        defaultCurrency: "GBP",
+      },
+    }),
+    prisma.supplier.create({
+      data: {
+        tenantId: tenantB.id,
+        branchId: branchB1.id,
+        legalName: "Supplier B Ltd",
+        tradingName: "Supplier B",
+        supplierCode: "SUP-B-001",
+        email: "supplier-b@example.test",
+        telephone: "01219876543",
+        countryCode: "GB",
+        defaultCurrency: "GBP",
+      },
+    }),
+  ]);
+
+  const [supplierContactA, supplierContactB] = await Promise.all([
+    prisma.supplierContact.create({
+      data: {
+        tenantId: tenantA.id,
+        supplierId: supplierA.id,
+        branchId: branchA1.id,
+        name: "Alice Buyer",
+        email: "alice.buyer@example.test",
+        isPrimary: true,
+      },
+    }),
+    prisma.supplierContact.create({
+      data: {
+        tenantId: tenantB.id,
+        supplierId: supplierB.id,
+        branchId: branchB1.id,
+        name: "Bob Vendor",
+        email: "bob.vendor@example.test",
+        isPrimary: true,
+      },
+    }),
+  ]);
+
+  const [supplierProductA, supplierProductB] = await Promise.all([
+    prisma.supplierProduct.create({
+      data: {
+        tenantId: tenantA.id,
+        supplierId: supplierA.id,
+        productId: productA.id,
+        supplierUnitId: unitA.id,
+        supplierSku: "SUP-A-CARPET-001",
+        leadTimeDays: 3,
+        preferredSupplier: true,
+      },
+    }),
+    prisma.supplierProduct.create({
+      data: {
+        tenantId: tenantB.id,
+        supplierId: supplierB.id,
+        productId: productB.id,
+        supplierUnitId: unitB.id,
+        supplierSku: "SUP-B-LVT-001",
+        leadTimeDays: 5,
+        preferredSupplier: true,
+      },
+    }),
+  ]);
+
   const [invitationA, invitationB] = await Promise.all([
     prisma.invitation.create({
       data: {
@@ -597,6 +700,12 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
     unitB,
     productA,
     productB,
+    supplierA,
+    supplierB,
+    supplierContactA,
+    supplierContactB,
+    supplierProductA,
+    supplierProductB,
     invitationA,
     invitationB,
     subscriptionPlan,

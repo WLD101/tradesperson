@@ -116,7 +116,7 @@ const tests: TestCase[] = [
   {
     name: "tenant-owned list endpoints exclude tenant B records",
     run: async () => {
-      const [branches, memberships, invitations, auditLogs, leads, customers, sites, products] =
+      const [branches, memberships, invitations, auditLogs, leads, customers, sites, products, suppliers] =
         await Promise.all([
           ownerAAgent.get("/api/v1/branches"),
           ownerAAgent.get(`/api/v1/tenants/${fixtures.tenantA.id}/memberships`),
@@ -126,6 +126,7 @@ const tests: TestCase[] = [
           ownerAAgent.get("/api/v1/customers"),
           ownerAAgent.get("/api/v1/sites"),
           ownerAAgent.get("/api/v1/catalogue/products"),
+          ownerAAgent.get("/api/v1/suppliers"),
         ]);
 
       assert.equal(branches.status, 200);
@@ -140,6 +141,10 @@ const tests: TestCase[] = [
       assert.deepEqual(
         products.body.items.map((item: { id: string }) => item.id).sort(),
         [fixtures.productA.id].sort(),
+      );
+      assert.deepEqual(
+        suppliers.body.items.map((item: { id: string }) => item.id).sort(),
+        [fixtures.supplierA.id].sort(),
       );
     },
   },
@@ -202,6 +207,38 @@ const tests: TestCase[] = [
     },
   },
   {
+    name: "tenant A cannot retrieve tenant B supplier",
+    run: async () => {
+      const response = await ownerAAgent.get(`/api/v1/suppliers/${fixtures.supplierB.id}`);
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot create supplier against tenant B branch id",
+    run: async () => {
+      const response = await ownerAAgent.post("/api/v1/suppliers").send({
+        branchId: fixtures.branchB1.id,
+        legalName: "Cross Tenant Supplier",
+        supplierCode: "X-SUP-001",
+        countryCode: "GB",
+      });
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot link supplier to tenant B product",
+    run: async () => {
+      const response = await ownerAAgent
+        .post(`/api/v1/suppliers/${fixtures.supplierA.id}/products`)
+        .send({
+          productId: fixtures.productB.id,
+          supplierUnitId: fixtures.unitB.id,
+          supplierSku: "CROSS-TENANT-SKU",
+        });
+      assert.equal(response.status, 404);
+    },
+  },
+  {
     name: "tenant A cannot create product using tenant B references",
     run: async () => {
       const response = await ownerAAgent.post("/api/v1/catalogue/products").send({
@@ -255,6 +292,18 @@ const tests: TestCase[] = [
           name: "Default",
           sku: "STAFF-001-DEF",
         },
+      });
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "supplier management requires explicit permission",
+    run: async () => {
+      const response = await staffAAgent.post("/api/v1/suppliers").send({
+        branchId: fixtures.branchA1.id,
+        legalName: "Staff Restricted Supplier",
+        supplierCode: "STAFF-SUP-001",
+        countryCode: "GB",
       });
       assert.equal(response.status, 403);
     },

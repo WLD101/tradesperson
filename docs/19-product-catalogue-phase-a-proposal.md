@@ -37,7 +37,7 @@ Prepared: July 16, 2026
 ## 3. External Packages Or Repositories Proposed
 | Capability | Package | Source | Licence | Why this option | Integration approach |
 | ---------- | ------- | ------ | ------- | ---------------- | -------------------- |
-| Server-friendly headless tables | [`@tanstack/react-table`](https://www.npmjs.com/package/@tanstack/react-table) | [npm](https://www.npmjs.com/package/@tanstack/react-table), [docs](https://tanstack.com/table/latest/docs/installation), [GitHub](https://github.com/tanstack/table) | MIT | Lowest-friction table option for React 19 and existing UI components | Build local table wrappers in `apps/web/src/components` rather than importing a full admin table system |
+| Server-friendly headless tables | [`@tanstack/react-table`](https://www.npmjs.com/package/@tanstack/react-table) | [npm](https://www.npmjs.com/package/@tanstack/react-table), [docs](https://tanstack.com/table/latest/docs/installation), [GitHub](https://github.com/tanstack/table) | MIT | Lowest-friction table option for React 19 and existing UI components | Adopted in Phase A for `/app/catalogue/products` using local wrappers in `apps/web/src/components` |
 | Simple drag-and-drop file selection | [`react-dropzone`](https://www.npmjs.com/package/react-dropzone) | [npm](https://www.npmjs.com/package/react-dropzone), [GitHub](https://github.com/react-dropzone/react-dropzone) | MIT | Lightweight, accessible, and does not force a backend upload stack | Use only as a file picker. Signed URLs, metadata persistence, and ownership checks remain custom |
 | CSV import preview | [`papaparse`](https://www.npmjs.com/package/papaparse) | [npm](https://www.npmjs.com/package/papaparse), [project site](https://www.papaparse.com/) | MIT | Mature browser parsing, worker support, and good UX for preview/mapping | Use in the web app for preview only. Validate and persist on the API |
 | XLSX import preview | [`read-excel-file`](https://www.npmjs.com/package/read-excel-file) | [npm](https://www.npmjs.com/package/read-excel-file), [GitHub](https://github.com/catamphetamine/read-excel-file) | MIT | Schema-friendly XLSX parsing in browser and Node | Use in import preview flow and worker-side validation |
@@ -59,6 +59,7 @@ Prepared: July 16, 2026
 - Keep UI functional and replaceable in this phase. Final branding and visual refinement are intentionally deferred until later.
 - Keep import preview logic in the web app, but perform authoritative validation and persistence on the API.
 - Keep upload security and storage ownership custom.
+- Defer product image/document uploads until signed-upload infrastructure is ready. Phase A keeps the metadata schema available without shipping a full upload workflow.
 - Avoid introducing:
   - a new auth system
   - a new state management library
@@ -232,7 +233,7 @@ Risk controls:
 
 ## Recommendation
 Proceed with a custom catalogue domain implemented inside the current monorepo, accelerated by a small set of isolated MIT-licensed building blocks:
-- `@tanstack/react-table`
+- `@tanstack/react-table` (adopted in Phase A)
 - `react-dropzone`
 - `papaparse`
 - `read-excel-file`

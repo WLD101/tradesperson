@@ -83,5 +83,19 @@ tests/
 - [Flooring ERP Phase 0 Audit](./docs/16-flooring-erp-phase-0-audit.md)
 - [Flooring ERP Site and Survey Domain](./docs/17-flooring-site-survey-domain.md)
 - [Tenant Isolation & Security Model](./docs/17-tenant-isolation.md)
+- [Open-Source Acceleration Register](./docs/18-open-source-acceleration-register.md)
+- [Product Catalogue Phase A Proposal](./docs/19-product-catalogue-phase-a-proposal.md)
+- [Flooring Product Catalogue Domain](./docs/20-flooring-product-catalogue-domain.md)
 - [Local development guide](./docs/local-development.md)
 - [Development credentials](./docs/development-access.md)
+
+## Current Foundation
+
+- Site and Survey foundation is complete through tenant-safe site detail/edit, survey lifecycle, room and measurement management, and server-authoritative area totals.
+- Product Catalogue Phase A now includes:
+  - tenant-owned catalogue models and migration
+  - catalogue permissions and seed data
+  - API CRUD for categories, manufacturers, brands, collections, units, products, and variants
+  - functional catalogue management screens in the web app
+  - tenant-isolation and category-rule validation coverage
+- Final UI branding remains deferred. Current catalogue screens are intentionally functional and replaceable.

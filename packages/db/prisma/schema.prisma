@@ -172,6 +172,12 @@ enum UnitOfMeasureKind {
   OTHER
 }
 
+enum SupplierStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
 model User {
   id                String                 @id @default(uuid()) @db.Uuid
   email             String                 @unique
@@ -265,6 +271,9 @@ model Tenant {
   attributeValues       ProductAttributeValue[]
   productDocuments      ProductDocument[]
   productImages         ProductImage[]
+  suppliers             Supplier[]
+  supplierContacts      SupplierContact[]
+  supplierProducts      SupplierProduct[]
 }
 
 model TenantMembership {
@@ -354,6 +363,8 @@ model Branch {
   customers         Customer[]
   sites             Site[]
   surveys           Survey[]
+  suppliers         Supplier[]
+  supplierContacts  SupplierContact[]
 
   @@unique([tenantId, branchCode])
   @@index([tenantId, status])
@@ -800,24 +811,133 @@ model ProductCollection {
 }
 
 model UnitOfMeasure {
-  id          String              @id @default(uuid()) @db.Uuid
-  tenantId    String              @db.Uuid
-  code        String
-  name        String
-  symbol      String?
-  kind        UnitOfMeasureKind   @default(OTHER)
-  description String?
-  status      ProductRecordStatus @default(ACTIVE)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  createdById String?             @db.Uuid
-  updatedById String?             @db.Uuid
-  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  products    Product[]           @relation("ProductPrimaryUnit")
-  variants    ProductVariant[]
+  id               String              @id @default(uuid()) @db.Uuid
+  tenantId         String              @db.Uuid
+  code             String
+  name             String
+  symbol           String?
+  kind             UnitOfMeasureKind   @default(OTHER)
+  description      String?
+  status           ProductRecordStatus @default(ACTIVE)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  createdById      String?             @db.Uuid
+  updatedById      String?             @db.Uuid
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  products         Product[]           @relation("ProductPrimaryUnit")
+  variants         ProductVariant[]
+  supplierProducts SupplierProduct[]
 
   @@unique([tenantId, code])
   @@index([tenantId, status, name])
+}
+
+model Supplier {
+  id                        String            @id @default(uuid()) @db.Uuid
+  tenantId                  String            @db.Uuid
+  branchId                  String?           @db.Uuid
+  legalName                 String
+  tradingName               String?
+  supplierCode              String
+  accountNumber             String?
+  companyRegistrationNumber String?
+  vatRegistrationNumber     String?
+  email                     String?
+  telephone                 String?
+  website                   String?
+  addressLine1              String?
+  addressLine2              String?
+  city                      String?
+  county                    String?
+  postcode                  String?
+  countryCode               String            @default("GB")
+  paymentTermsDescription   String?
+  creditLimit               Decimal?          @db.Decimal(12, 2)
+  defaultCurrency           String            @default("GBP")
+  typicalLeadTimeDays       Int?
+  minimumOrderNotes         String?
+  deliveryNotes             String?
+  returnPolicyNotes         String?
+  preferredSupplier         Boolean           @default(false)
+  status                    SupplierStatus    @default(ACTIVE)
+  internalNotes             String?
+  createdAt                 DateTime          @default(now())
+  updatedAt                 DateTime          @updatedAt
+  createdById               String?           @db.Uuid
+  updatedById               String?           @db.Uuid
+  tenant                    Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch                    Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  contacts                  SupplierContact[]
+  supplierProducts          SupplierProduct[]
+
+  @@unique([tenantId, supplierCode])
+  @@index([tenantId, status, legalName])
+  @@index([tenantId, preferredSupplier, status])
+  @@index([branchId])
+}
+
+model SupplierContact {
+  id                 String         @id @default(uuid()) @db.Uuid
+  tenantId           String         @db.Uuid
+  supplierId         String         @db.Uuid
+  branchId           String?        @db.Uuid
+  name               String
+  jobTitle           String?
+  email              String?
+  telephone          String?
+  mobile             String?
+  isPrimary          Boolean        @default(false)
+  isOrderingContact  Boolean        @default(false)
+  isAccountsContact  Boolean        @default(false)
+  isTechnicalContact Boolean        @default(false)
+  notes              String?
+  status             SupplierStatus @default(ACTIVE)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  createdById        String?        @db.Uuid
+  updatedById        String?        @db.Uuid
+  tenant             Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  supplier           Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  branch             Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, supplierId, status])
+  @@index([branchId])
+}
+
+model SupplierProduct {
+  id                  String          @id @default(uuid()) @db.Uuid
+  tenantId            String          @db.Uuid
+  supplierId          String          @db.Uuid
+  productId           String          @db.Uuid
+  variantId           String?         @db.Uuid
+  supplierUnitId      String?         @db.Uuid
+  supplierSku         String
+  supplierDescription String?
+  packQuantity        Decimal?        @db.Decimal(12, 2)
+  packCoverageM2      Decimal?        @db.Decimal(10, 4)
+  rollWidthM          Decimal?        @db.Decimal(10, 2)
+  standardRollLengthM Decimal?        @db.Decimal(10, 2)
+  minimumOrderQty     Decimal?        @db.Decimal(12, 2)
+  leadTimeDays        Int?
+  preferredSupplier   Boolean         @default(false)
+  status              SupplierStatus  @default(ACTIVE)
+  lastConfirmedAt     DateTime?
+  notes               String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  createdById         String?         @db.Uuid
+  updatedById         String?         @db.Uuid
+  tenant              Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  supplier            Supplier        @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  product             Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variant             ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  supplierUnit        UnitOfMeasure?  @relation(fields: [supplierUnitId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, supplierId, supplierSku])
+  @@index([tenantId, supplierId, status])
+  @@index([tenantId, productId, status])
+  @@index([tenantId, variantId, status])
+  @@index([supplierUnitId])
 }
 
 model Product {
@@ -863,6 +983,7 @@ model Product {
   attributeValues             ProductAttributeValue[]
   documents                   ProductDocument[]
   images                      ProductImage[]
+  supplierProducts            SupplierProduct[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, sku])
@@ -904,6 +1025,7 @@ model ProductVariant {
   attributeValues     ProductAttributeValue[]
   documents           ProductDocument[]
   images              ProductImage[]
+  supplierProducts    SupplierProduct[]
 
   @@unique([tenantId, sku])
   @@index([tenantId, productId, lifecycleStatus])

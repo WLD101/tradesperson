@@ -7,11 +7,13 @@ import { redirect } from "next/navigation";
 async function createSurvey(formData: FormData) {
   "use server";
 
+  const siteId = String(formData.get("siteId") ?? "");
+  const site = await apiFetch<{ customer: { id: string } }>(`/api/v1/sites/${siteId}`);
   const survey = await apiFetch<any>("/api/v1/surveys", {
     method: "POST",
     body: JSON.stringify({
-      siteId: formData.get("siteId"),
-      customerId: formData.get("customerId"),
+      siteId,
+      customerId: site.customer.id,
       reference: formData.get("reference"),
       purpose: formData.get("purpose") || "MEASUREMENT",
     }),
@@ -44,7 +46,15 @@ export default async function SurveysPage({
               Manage site surveys, room measurements, and floor plans.
             </p>
           </div>
-          <p className="text-sm text-slate-500">{surveys.length} total</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-slate-500">{surveys.length} total</p>
+            <Link
+              href="/app/crm/surveys/new"
+              className="rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              New survey
+            </Link>
+          </div>
         </div>
         <div className="mt-4 space-y-3">
           {surveys.map((survey) => (
@@ -89,11 +99,8 @@ export default async function SurveysPage({
               </option>
             ))}
           </select>
-          {/* We need customerId for the API but the API requires it to match the site's customer. We can fetch it client side or just send it by hiding it, but a server action can't easily sync them. Let's just create a workaround: users select site, we use site.customerId. But wait, HTML forms don't let us dynamically change hidden inputs based on select without JS. We can do it in the server action! But we only get formData. */}
-          {/* We will rely on server action fetching the site to get customerId. But API requires it. Let's just have the server action fetch site, then forward customerId. Wait, I will just change the server action to fetch site if customerId is missing! Oh wait, I can just require the user to pick site, and server action will look up the site to get customerId before calling apiFetch. */}
-          
           <Input name="reference" placeholder="Survey reference (e.g. SUR-1234)" required />
-          
+
           <select
             className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-500"
             name="purpose"

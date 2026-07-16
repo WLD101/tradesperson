@@ -24,7 +24,7 @@ const branchIdSchema = z.string().uuid().optional();
 
 const surveySchema = z.object({
   siteId: z.string().uuid(),
-  customerId: z.string().uuid(),
+  customerId: z.string().uuid().optional(),
   leadId: z.string().uuid().optional().nullable(),
   branchId: branchIdSchema,
   reference: z.string().min(1),
@@ -122,6 +122,26 @@ class SurveysController {
 const roomSchema = z.object({
   name: z.string().min(1),
   floorLevel: z.string().optional(),
+  existingCovering: z.string().optional(),
+  subfloorType: z.enum([
+    "CONCRETE",
+    "SAND_CEMENT_SCREED",
+    "ANHYDRITE_SCREED",
+    "TIMBER_BOARDS",
+    "PLYWOOD",
+    "CHIPBOARD",
+    "EXISTING_TILE",
+    "EXISTING_RESILIENT",
+    "RAISED_ACCESS",
+    "OTHER",
+    "UNKNOWN",
+  ]).optional(),
+  subfloorCondition: z.string().optional(),
+  underfloorHeating: z.boolean().optional(),
+  upliftRequired: z.boolean().optional(),
+  wastePercentage: z.coerce.number().min(0).max(100).optional(),
+  preparationNotes: z.string().optional(),
+  installationNotes: z.string().optional(),
 });
 
 @Controller({ path: "surveys/:surveyId/rooms", version: "1" })

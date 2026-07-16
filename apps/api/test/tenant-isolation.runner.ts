@@ -75,7 +75,9 @@ class HttpClient {
     const payload: any = await response.json();
     return {
       status: response.status,
-      body: payload.error ? payload.error : (payload.data !== undefined ? payload.data : payload),
+      body: payload.data !== undefined ? payload.data : payload,
+      error: payload.error ?? null,
+      rawBody: payload,
     };
   }
 }
@@ -220,7 +222,7 @@ const tests: TestCase[] = [
       // Approved survey cannot receive rooms
       res = await ownerAAgent.post(`/api/v1/surveys/${sId}/rooms`).send({ name: "Post-Approval Room" });
       assert.equal(res.status, 400);
-      assert.ok(res.body.message.includes("Cannot add rooms to a APPROVED survey"));
+      assert.ok(res.error?.message.includes("immutable survey state"));
     },
   },
   {

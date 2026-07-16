@@ -80,6 +80,19 @@ const siteSchema = z.object({
   countryCode: z.string().min(2).max(2).optional(),
   accessNotes: z.preprocess(emptyStringToNull, z.string().min(2).nullable()).optional(),
   occupancyStatus: z.enum(["OCCUPIED", "UNOCCUPIED", "NEW_BUILD", "UNDER_RENOVATION"]).optional(),
+  primaryContactName: z.preprocess(emptyStringToNull, z.string().min(2).nullable()).optional(),
+  primaryContactPhone: z.preprocess(emptyStringToNull, z.string().min(3).nullable()).optional(),
+  primaryContactEmail: z.preprocess(
+    emptyStringToNull,
+    z.string().email().nullable(),
+  ).optional(),
+  floorLevel: z.preprocess(emptyStringToNull, z.string().min(1).nullable()).optional(),
+  hasLift: z.boolean().optional(),
+  parkingNotes: z.preprocess(emptyStringToNull, z.string().min(2).nullable()).optional(),
+  workingHourNotes: z.preprocess(emptyStringToNull, z.string().min(2).nullable()).optional(),
+  asbestosConcern: z.boolean().optional(),
+  dampConcern: z.boolean().optional(),
+  generalSiteNotes: z.preprocess(emptyStringToNull, z.string().min(2).nullable()).optional(),
 });
 
 const leadConversionSchema = z.object({
@@ -406,6 +419,27 @@ export class SitesController {
     });
   }
 
+  @Get(":siteId")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("sites.view")
+  async getSite(
+    @Param("siteId") siteId: string,
+    @CurrentSession() session: TenantSession,
+  ) {
+    const { tenantId } = this.tenantAccess.ensureTenant(session);
+    return this.prisma.client.site.findFirstOrThrow({
+      where: {
+        id: siteId,
+        tenantId,
+        ...this.branchAccess.branchWhere(session, tenantId),
+      },
+      include: {
+        branch: { select: { id: true, name: true } },
+        customer: { select: { id: true, displayName: true } },
+      },
+    });
+  }
+
   @Post()
   @UseGuards(AuthGuard, PermissionsGuard)
   @RequirePermissions("sites.manage")
@@ -440,6 +474,17 @@ export class SitesController {
         countryCode: input.countryCode ?? "GB",
         accessNotes: input.accessNotes ?? null,
         occupancyStatus: input.occupancyStatus ?? null,
+        primaryContactName: input.primaryContactName ?? null,
+        primaryContactPhone: input.primaryContactPhone ?? null,
+        primaryContactEmail: input.primaryContactEmail ?? null,
+        floorLevel: input.floorLevel ?? null,
+        hasLift: input.hasLift ?? null,
+        parkingNotes: input.parkingNotes ?? null,
+        workingHourNotes: input.workingHourNotes ?? null,
+        asbestosConcern: input.asbestosConcern ?? false,
+        dampConcern: input.dampConcern ?? false,
+        generalSiteNotes: input.generalSiteNotes ?? null,
+        createdById: session.user.id,
       },
       include: {
         branch: { select: { id: true, name: true } },
@@ -453,6 +498,103 @@ export class SitesController {
       action: "site.create",
       entityType: "site",
       entityId: site.id,
+      newValues: input,
+    });
+
+    return site;
+  }
+
+  @Patch(":siteId")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("sites.manage")
+  async update(
+    @Param("siteId") siteId: string,
+    @Body() body: unknown,
+    @CurrentSession() session: TenantSession,
+  ) {
+    const { tenantId } = this.tenantAccess.ensureTenant(session);
+    const input = siteSchema.partial().parse(body);
+    const previous = await this.prisma.client.site.findFirstOrThrow({
+      where: {
+        id: siteId,
+        tenantId,
+        ...this.branchAccess.branchWhere(session, tenantId),
+      },
+    });
+    const branchId =
+      input.branchId === undefined
+        ? undefined
+        : await this.branchAccess.resolveCreateBranchId(
+            session,
+            input.branchId,
+            tenantId,
+          );
+
+    if (input.customerId) {
+      await this.prisma.client.customer.findFirstOrThrow({
+        where: {
+          id: input.customerId,
+          tenantId,
+          ...this.branchAccess.branchWhere(session, tenantId),
+        },
+        select: { id: true },
+      });
+    }
+
+    const site = await this.prisma.client.site.update({
+      where: { id: previous.id },
+      data: {
+        ...(input.customerId !== undefined ? { customerId: input.customerId } : {}),
+        ...(input.label !== undefined ? { label: input.label } : {}),
+        ...(branchId !== undefined ? { branchId } : {}),
+        ...(input.siteType !== undefined ? { siteType: input.siteType } : {}),
+        ...(input.addressLine1 !== undefined ? { addressLine1: input.addressLine1 } : {}),
+        ...(input.addressLine2 !== undefined ? { addressLine2: input.addressLine2 } : {}),
+        ...(input.city !== undefined ? { city: input.city } : {}),
+        ...(input.county !== undefined ? { county: input.county } : {}),
+        ...(input.postcode !== undefined ? { postcode: input.postcode } : {}),
+        ...(input.countryCode !== undefined ? { countryCode: input.countryCode } : {}),
+        ...(input.accessNotes !== undefined ? { accessNotes: input.accessNotes } : {}),
+        ...(input.occupancyStatus !== undefined
+          ? { occupancyStatus: input.occupancyStatus }
+          : {}),
+        ...(input.primaryContactName !== undefined
+          ? { primaryContactName: input.primaryContactName }
+          : {}),
+        ...(input.primaryContactPhone !== undefined
+          ? { primaryContactPhone: input.primaryContactPhone }
+          : {}),
+        ...(input.primaryContactEmail !== undefined
+          ? { primaryContactEmail: input.primaryContactEmail }
+          : {}),
+        ...(input.floorLevel !== undefined ? { floorLevel: input.floorLevel } : {}),
+        ...(input.hasLift !== undefined ? { hasLift: input.hasLift } : {}),
+        ...(input.parkingNotes !== undefined ? { parkingNotes: input.parkingNotes } : {}),
+        ...(input.workingHourNotes !== undefined
+          ? { workingHourNotes: input.workingHourNotes }
+          : {}),
+        ...(input.asbestosConcern !== undefined
+          ? { asbestosConcern: input.asbestosConcern }
+          : {}),
+        ...(input.dampConcern !== undefined ? { dampConcern: input.dampConcern } : {}),
+        ...(input.generalSiteNotes !== undefined
+          ? { generalSiteNotes: input.generalSiteNotes }
+          : {}),
+        updatedById: session.user.id,
+      },
+      include: {
+        branch: { select: { id: true, name: true } },
+        customer: { select: { id: true, displayName: true } },
+      },
+    });
+
+    await this.audit.record({
+      tenantId,
+      actorUserId: session.user.id,
+      action: "site.update",
+      entityType: "site",
+      entityId: site.id,
+      previousValues: previous,
       newValues: input,
     });
 

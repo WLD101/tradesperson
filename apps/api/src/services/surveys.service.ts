@@ -1,30 +1,96 @@
-import { Injectable, BadRequestException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "./prisma.service";
 import { AuditService } from "./audit.service";
-import { BranchAccessService } from "./branch-access.service";
 import { AreaCalculatorService } from "./area-calculator.service";
+
+type SurveyInput = {
+  siteId: string;
+  customerId?: string | null | undefined;
+  leadId?: string | null | undefined;
+  reference: string;
+  purpose?: "ESTIMATE" | "MEASUREMENT" | "INSPECTION" | "REMEDIAL" | undefined;
+};
+
+type RoomInput = {
+  name?: string | undefined;
+  floorLevel?: string | undefined;
+  existingCovering?: string | undefined;
+  subfloorType?:
+    | "CONCRETE"
+    | "SAND_CEMENT_SCREED"
+    | "ANHYDRITE_SCREED"
+    | "TIMBER_BOARDS"
+    | "PLYWOOD"
+    | "CHIPBOARD"
+    | "EXISTING_TILE"
+    | "EXISTING_RESILIENT"
+    | "RAISED_ACCESS"
+    | "OTHER"
+    | "UNKNOWN"
+    | undefined;
+  subfloorCondition?: string | undefined;
+  underfloorHeating?: boolean | undefined;
+  upliftRequired?: boolean | undefined;
+  wastePercentage?: number | undefined;
+  preparationNotes?: string | undefined;
+  installationNotes?: string | undefined;
+};
+
+type MeasurementInput = {
+  type?: string | undefined;
+  operation?: "ADD" | "DEDUCT" | undefined;
+  dimensions?: Record<string, unknown> | undefined;
+  notes?: string | undefined;
+};
 
 @Injectable()
 export class SurveysService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
-    private readonly branchAccess: BranchAccessService,
+    private readonly calculator: AreaCalculatorService,
   ) {}
 
-  async createSurvey(tenantId: string, userId: string, input: any, branchId: string | null) {
-    // Validate site and customer belong to tenant
-    await this.prisma.client.site.findFirstOrThrow({
-      where: { id: input.siteId, tenantId, customerId: input.customerId },
+  async createSurvey(
+    tenantId: string,
+    userId: string,
+    input: SurveyInput,
+    branchId: string | null,
+  ) {
+    const site = await this.prisma.client.site.findFirstOrThrow({
+      where: { id: input.siteId, tenantId },
+      select: { id: true, customerId: true, branchId: true },
     });
+    const customerId = input.customerId ?? site.customerId;
+
+    if (customerId !== site.customerId) {
+      throw new NotFoundException("Resource not found.");
+    }
+
+    await this.prisma.client.customer.findFirstOrThrow({
+      where: { id: customerId, tenantId },
+      select: { id: true },
+    });
+
+    if (input.leadId) {
+      await this.prisma.client.lead.findFirstOrThrow({
+        where: { id: input.leadId, tenantId },
+        select: { id: true },
+      });
+    }
 
     const survey = await this.prisma.client.survey.create({
       data: {
         tenantId,
         siteId: input.siteId,
-        customerId: input.customerId,
+        customerId,
         leadId: input.leadId ?? null,
-        branchId,
+        branchId: branchId ?? site.branchId ?? null,
         reference: input.reference,
         purpose: input.purpose ?? null,
         createdById: userId,
@@ -43,29 +109,35 @@ export class SurveysService {
     return survey;
   }
 
-  async updateSurveyStatus(tenantId: string, userId: string, surveyId: string, newStatus: string) {
+  async updateSurveyStatus(
+    tenantId: string,
+    userId: string,
+    surveyId: string,
+    newStatus: string,
+  ) {
     const survey = await this.prisma.client.survey.findFirstOrThrow({
       where: { id: surveyId, tenantId },
     });
 
-    // Enforce basic state transitions
     const validTransitions: Record<string, string[]> = {
-      "DRAFT": ["SCHEDULED", "CANCELLED"],
-      "SCHEDULED": ["IN_PROGRESS", "CANCELLED"],
-      "IN_PROGRESS": ["COMPLETED", "CANCELLED"],
-      "COMPLETED": ["REVIEWED", "CANCELLED"],
-      "REVIEWED": ["APPROVED", "CANCELLED"],
-      "APPROVED": ["SUPERSEDED"],
+      DRAFT: ["SCHEDULED", "CANCELLED"],
+      SCHEDULED: ["IN_PROGRESS", "CANCELLED"],
+      IN_PROGRESS: ["COMPLETED"],
+      COMPLETED: ["REVIEWED"],
+      REVIEWED: ["APPROVED"],
+      APPROVED: ["SUPERSEDED"],
     };
 
     if (!validTransitions[survey.status]?.includes(newStatus)) {
-      throw new BadRequestException(`Cannot transition survey from ${survey.status} to ${newStatus}`);
+      throw new BadRequestException(
+        `Cannot transition survey from ${survey.status} to ${newStatus}`,
+      );
     }
 
     const updated = await this.prisma.client.survey.update({
       where: { id: surveyId },
       data: {
-        status: newStatus as any,
+        status: newStatus as never,
         updatedById: userId,
         ...(newStatus === "SCHEDULED" ? { scheduledAt: new Date() } : {}),
         ...(newStatus === "IN_PROGRESS" ? { startedAt: new Date() } : {}),
@@ -88,206 +160,376 @@ export class SurveysService {
     return updated;
   }
 
-  async addRoom(tenantId: string, userId: string, surveyId: string, input: any) {
+  async addRoom(
+    tenantId: string,
+    userId: string,
+    surveyId: string,
+    input: Required<Pick<RoomInput, "name">> & RoomInput,
+  ) {
     const survey = await this.prisma.client.survey.findFirstOrThrow({
       where: { id: surveyId, tenantId },
     });
-
-    if (survey.status === "APPROVED" || survey.status === "SUPERSEDED" || survey.status === "CANCELLED") {
-      throw new BadRequestException(`Cannot add rooms to a ${survey.status} survey.`);
+    this.assertMutableState(survey.status, "add rooms");
+    if (!input.name) {
+      throw new BadRequestException("Room name is required.");
     }
 
-    const room = await this.prisma.client.surveyRoom.create({
+    return this.prisma.client.surveyRoom.create({
       data: {
         tenantId,
         surveyId,
         name: input.name,
         floorLevel: input.floorLevel ?? null,
+        existingCovering: input.existingCovering ?? null,
+        subfloorType: input.subfloorType ?? null,
+        subfloorCondition: input.subfloorCondition ?? null,
+        underfloorHeating: input.underfloorHeating ?? false,
+        upliftRequired: input.upliftRequired ?? false,
+        wastePercentage: input.wastePercentage ?? 0,
+        preparationNotes: input.preparationNotes ?? null,
+        installationNotes: input.installationNotes ?? null,
         createdById: userId,
       },
     });
-
-    return room;
   }
+
   async getSurvey(tenantId: string, surveyId: string) {
     return this.prisma.client.survey.findFirstOrThrow({
       where: { id: surveyId, tenantId },
       include: {
+        site: { select: { id: true, label: true, customerId: true } },
+        customer: { select: { id: true, displayName: true } },
         rooms: {
-          include: { components: true }
-        }
-      }
+          include: {
+            components: {
+              orderBy: { createdAt: "asc" },
+            },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
     });
   }
 
-  async updateDraft(tenantId: string, userId: string, surveyId: string, input: any) {
+  async updateDraft(
+    tenantId: string,
+    userId: string,
+    surveyId: string,
+    input: {
+      reference?: string | undefined;
+      purpose?: SurveyInput["purpose"] | undefined;
+    },
+  ) {
     const survey = await this.prisma.client.survey.findFirstOrThrow({
       where: { id: surveyId, tenantId },
     });
 
-    if (survey.status !== "DRAFT") {
-      throw new BadRequestException("Only DRAFT surveys can be updated directly. Create a revision if APPROVED.");
+    if (!["DRAFT", "SCHEDULED", "IN_PROGRESS"].includes(survey.status)) {
+      throw new BadRequestException(
+        "Only DRAFT, SCHEDULED, or IN_PROGRESS surveys can be updated directly.",
+      );
     }
 
-    const updated = await this.prisma.client.survey.update({
+    return this.prisma.client.survey.update({
       where: { id: surveyId },
       data: {
-        reference: input.reference !== undefined ? input.reference : survey.reference,
-        purpose: input.purpose !== undefined ? input.purpose : survey.purpose,
+        ...(input.reference !== undefined ? { reference: input.reference } : {}),
+        ...(input.purpose !== undefined ? { purpose: input.purpose } : {}),
         updatedById: userId,
-      }
+      },
     });
-
-    return updated;
   }
 
   async listRooms(tenantId: string, surveyId: string) {
-    await this.prisma.client.survey.findFirstOrThrow({ where: { id: surveyId, tenantId } });
+    await this.prisma.client.survey.findFirstOrThrow({
+      where: { id: surveyId, tenantId },
+    });
+
     return this.prisma.client.surveyRoom.findMany({
       where: { tenantId, surveyId },
-      include: { components: true }
+      include: { components: true },
+      orderBy: { createdAt: "asc" },
     });
   }
 
   async getRoom(tenantId: string, surveyId: string, roomId: string) {
     return this.prisma.client.surveyRoom.findFirstOrThrow({
       where: { id: roomId, surveyId, tenantId },
-      include: { components: true }
+      include: { components: true },
     });
   }
 
-  private assertMutableState(status: string, action: string) {
-    if (["COMPLETED", "REVIEWED", "APPROVED", "SUPERSEDED", "CANCELLED"].includes(status)) {
-      throw new BadRequestException(`Cannot ${action} in an immutable survey state (${status}).`);
-    }
-  }
-
-  async updateRoom(tenantId: string, userId: string, surveyId: string, roomId: string, input: any) {
-    const survey = await this.prisma.client.survey.findFirstOrThrow({ where: { id: surveyId, tenantId } });
+  async updateRoom(
+    tenantId: string,
+    userId: string,
+    surveyId: string,
+    roomId: string,
+    input: RoomInput,
+  ) {
+    const survey = await this.prisma.client.survey.findFirstOrThrow({
+      where: { id: surveyId, tenantId },
+    });
     this.assertMutableState(survey.status, "edit rooms");
-    
-    return this.prisma.client.surveyRoom.update({
-      where: { id: roomId, tenantId },
-      data: {
-        name: input.name,
-        floorLevel: input.floorLevel,
-        updatedById: userId,
-      }
+
+    const room = await this.prisma.client.surveyRoom.findFirstOrThrow({
+      where: { id: roomId, surveyId, tenantId },
+      select: { id: true, wastePercentage: true },
+    });
+
+    return this.prisma.client.$transaction(async (tx) => {
+      const updatedRoom = await tx.surveyRoom.update({
+        where: { id: room.id },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.floorLevel !== undefined ? { floorLevel: input.floorLevel } : {}),
+          ...(input.existingCovering !== undefined
+            ? { existingCovering: input.existingCovering }
+            : {}),
+          ...(input.subfloorType !== undefined ? { subfloorType: input.subfloorType } : {}),
+          ...(input.subfloorCondition !== undefined
+            ? { subfloorCondition: input.subfloorCondition }
+            : {}),
+          ...(input.underfloorHeating !== undefined
+            ? { underfloorHeating: input.underfloorHeating }
+            : {}),
+          ...(input.upliftRequired !== undefined
+            ? { upliftRequired: input.upliftRequired }
+            : {}),
+          ...(input.wastePercentage !== undefined
+            ? { wastePercentage: input.wastePercentage }
+            : {}),
+          ...(input.preparationNotes !== undefined
+            ? { preparationNotes: input.preparationNotes }
+            : {}),
+          ...(input.installationNotes !== undefined
+            ? { installationNotes: input.installationNotes }
+            : {}),
+          updatedById: userId,
+        },
+      });
+
+      await this.recalculateRoomTotals(
+        tx,
+        tenantId,
+        room.id,
+        updatedRoom.wastePercentage.toNumber(),
+      );
+
+      return tx.surveyRoom.findUniqueOrThrow({
+        where: { id: room.id },
+        include: { components: true },
+      });
     });
   }
 
-  async deleteRoom(tenantId: string, userId: string, surveyId: string, roomId: string) {
-    const survey = await this.prisma.client.survey.findFirstOrThrow({ where: { id: surveyId, tenantId } });
+  async deleteRoom(
+    tenantId: string,
+    userId: string,
+    surveyId: string,
+    roomId: string,
+  ) {
+    const survey = await this.prisma.client.survey.findFirstOrThrow({
+      where: { id: surveyId, tenantId },
+    });
     this.assertMutableState(survey.status, "delete rooms");
 
-    await this.prisma.client.surveyRoom.delete({
-      where: { id: roomId, tenantId }
+    const room = await this.prisma.client.surveyRoom.findFirstOrThrow({
+      where: { id: roomId, surveyId, tenantId },
+      select: { id: true },
     });
+
+    await this.prisma.client.surveyRoom.delete({
+      where: { id: room.id },
+    });
+    await this.audit.record({
+      tenantId,
+      actorUserId: userId,
+      action: "survey.room.delete",
+      entityType: "surveyRoom",
+      entityId: room.id,
+    });
+
     return { success: true };
   }
 
-  async addMeasurement(tenantId: string, userId: string, surveyId: string, roomId: string, input: any) {
-    const survey = await this.prisma.client.survey.findFirstOrThrow({ where: { id: surveyId, tenantId } });
+  async addMeasurement(
+    tenantId: string,
+    userId: string,
+    surveyId: string,
+    roomId: string,
+    input: Required<Pick<MeasurementInput, "type" | "dimensions">> & MeasurementInput,
+  ) {
+    const survey = await this.prisma.client.survey.findFirstOrThrow({
+      where: { id: surveyId, tenantId },
+    });
     this.assertMutableState(survey.status, "add measurements");
 
-    const room = await this.prisma.client.surveyRoom.findFirstOrThrow({ where: { id: roomId, surveyId, tenantId } });
-    
+    const room = await this.prisma.client.surveyRoom.findFirstOrThrow({
+      where: { id: roomId, surveyId, tenantId },
+    });
+
     if (input.type === "CUSTOM") {
       throw new BadRequestException("Manual overrides (CUSTOM) are currently disabled.");
     }
-    const calculatedArea = new AreaCalculatorService().calculateComponentArea({
+
+    const calculatedArea = this.calculator.calculateComponentArea({
       type: input.type,
       ...input.dimensions,
-    } as any);
-    
+    } as never);
+
     return this.prisma.client.$transaction(async (tx) => {
       const component = await tx.measurementComponent.create({
         data: {
           tenantId,
           roomId,
-          type: input.type,
-          operation: input.operation ?? "ADD",
-          dimensions: input.dimensions,
-          calculatedArea: calculatedArea,
-          notes: input.notes,
+          type: input.type as never,
+          operation: (input.operation ?? "ADD") as never,
+          dimensions: input.dimensions as Prisma.InputJsonValue,
+          calculatedArea,
+          notes: input.notes ?? null,
           createdById: userId,
         },
       });
 
-      await this.recalculateRoomTotals(tx, tenantId, roomId, room.wastePercentage?.toNumber() ?? 0);
+      await this.recalculateRoomTotals(
+        tx,
+        tenantId,
+        roomId,
+        room.wastePercentage.toNumber(),
+      );
+
       return component;
     });
   }
 
-  async updateMeasurement(tenantId: string, userId: string, surveyId: string, roomId: string, componentId: string, input: any) {
-    const survey = await this.prisma.client.survey.findFirstOrThrow({ where: { id: surveyId, tenantId } });
+  async updateMeasurement(
+    tenantId: string,
+    userId: string,
+    surveyId: string,
+    roomId: string,
+    componentId: string,
+    input: MeasurementInput,
+  ) {
+    const survey = await this.prisma.client.survey.findFirstOrThrow({
+      where: { id: surveyId, tenantId },
+    });
     this.assertMutableState(survey.status, "update measurements");
 
-    const room = await this.prisma.client.surveyRoom.findFirstOrThrow({ where: { id: roomId, surveyId, tenantId } });
-    await this.prisma.client.measurementComponent.findFirstOrThrow({ where: { id: componentId, roomId, tenantId } });
+    const room = await this.prisma.client.surveyRoom.findFirstOrThrow({
+      where: { id: roomId, surveyId, tenantId },
+    });
+    const existing = await this.prisma.client.measurementComponent.findFirstOrThrow({
+      where: { id: componentId, roomId, tenantId },
+    });
 
     if (input.type === "CUSTOM") {
       throw new BadRequestException("Manual overrides (CUSTOM) are currently disabled.");
     }
 
-    let calculatedArea: any;
-    if (input.type && input.dimensions) {
-      calculatedArea = new AreaCalculatorService().calculateComponentArea({
-        type: input.type,
-        ...input.dimensions,
-      } as any);
-    }
+    const nextType = input.type ?? existing.type;
+    const nextDimensions = (input.dimensions ??
+      existing.dimensions) as Record<string, unknown>;
+    const calculatedArea =
+      input.type !== undefined || input.dimensions !== undefined
+        ? this.calculator.calculateComponentArea({
+            type: nextType,
+            ...nextDimensions,
+          } as never)
+        : undefined;
 
     return this.prisma.client.$transaction(async (tx) => {
       const component = await tx.measurementComponent.update({
-        where: { id: componentId, tenantId },
+        where: { id: existing.id },
         data: {
-          ...(input.type && { type: input.type }),
-          ...(input.operation && { operation: input.operation }),
-          ...(input.dimensions && { dimensions: input.dimensions }),
-          ...(calculatedArea !== undefined && { calculatedArea }),
-          ...(input.notes !== undefined && { notes: input.notes }),
+          ...(input.type !== undefined ? { type: input.type as never } : {}),
+          ...(input.operation !== undefined
+            ? { operation: input.operation as never }
+            : {}),
+          ...(input.dimensions !== undefined
+            ? { dimensions: input.dimensions as Prisma.InputJsonValue }
+            : {}),
+          ...(calculatedArea !== undefined ? { calculatedArea } : {}),
+          ...(input.notes !== undefined ? { notes: input.notes } : {}),
           updatedById: userId,
         },
       });
 
-      await this.recalculateRoomTotals(tx, tenantId, roomId, room.wastePercentage?.toNumber() ?? 0);
+      await this.recalculateRoomTotals(
+        tx,
+        tenantId,
+        roomId,
+        room.wastePercentage.toNumber(),
+      );
+
       return component;
     });
   }
 
-  async deleteMeasurement(tenantId: string, userId: string, surveyId: string, roomId: string, componentId: string) {
-    const survey = await this.prisma.client.survey.findFirstOrThrow({ where: { id: surveyId, tenantId } });
+  async deleteMeasurement(
+    tenantId: string,
+    userId: string,
+    surveyId: string,
+    roomId: string,
+    componentId: string,
+  ) {
+    const survey = await this.prisma.client.survey.findFirstOrThrow({
+      where: { id: surveyId, tenantId },
+    });
     this.assertMutableState(survey.status, "delete measurements");
 
-    const room = await this.prisma.client.surveyRoom.findFirstOrThrow({ where: { id: roomId, surveyId, tenantId } });
-    await this.prisma.client.measurementComponent.findFirstOrThrow({ where: { id: componentId, roomId, tenantId } });
+    const room = await this.prisma.client.surveyRoom.findFirstOrThrow({
+      where: { id: roomId, surveyId, tenantId },
+    });
+    const component = await this.prisma.client.measurementComponent.findFirstOrThrow({
+      where: { id: componentId, roomId, tenantId },
+      select: { id: true },
+    });
 
     return this.prisma.client.$transaction(async (tx) => {
       await tx.measurementComponent.delete({
-        where: { id: componentId, tenantId }
+        where: { id: component.id },
       });
-      await this.recalculateRoomTotals(tx, tenantId, roomId, room.wastePercentage?.toNumber() ?? 0);
+
+      await this.recalculateRoomTotals(
+        tx,
+        tenantId,
+        roomId,
+        room.wastePercentage.toNumber(),
+      );
+
       return { success: true };
     });
   }
 
-  private async recalculateRoomTotals(tx: any, tenantId: string, roomId: string, wastePercentage: number) {
+  private assertMutableState(status: string, action: string) {
+    if (["COMPLETED", "REVIEWED", "APPROVED", "SUPERSEDED", "CANCELLED"].includes(status)) {
+      throw new BadRequestException(
+        `Cannot ${action} in an immutable survey state (${status}).`,
+      );
+    }
+  }
+
+  private async recalculateRoomTotals(
+    tx: any,
+    tenantId: string,
+    roomId: string,
+    wastePercentage: number,
+  ) {
     const roomComps = await tx.measurementComponent.findMany({
       where: { roomId, tenantId },
     });
 
     const { netArea, grossArea, wasteAdjustedArea } =
-      new AreaCalculatorService().calculateRoomTotals(
-        roomComps.map((c: any) => ({
-          operation: c.operation,
-          area: c.calculatedArea,
+      this.calculator.calculateRoomTotals(
+        roomComps.map((component: { operation: any; calculatedArea: Prisma.Decimal }) => ({
+          operation: component.operation,
+          area: component.calculatedArea,
         })),
-        wastePercentage
+        wastePercentage,
       );
 
     await tx.surveyRoom.update({
-      where: { id: roomId, tenantId },
+      where: { id: roomId },
       data: {
         netArea,
         grossArea,

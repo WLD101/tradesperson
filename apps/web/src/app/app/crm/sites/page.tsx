@@ -52,7 +52,15 @@ export default async function SitesPage() {
               Customer locations that later surveys, quotes, and jobs will use.
             </p>
           </div>
-          <p className="text-sm text-slate-500">{sites.length} total</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-slate-500">{sites.length} total</p>
+            <Link
+              href="/app/crm/sites/new"
+              className="rounded-md bg-slate-950 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              New site
+            </Link>
+          </div>
         </div>
         <div className="mt-4 space-y-3">
           {sites.map((site) => (

@@ -57,32 +57,40 @@ export class AreaCalculatorService {
     }
   }
 
-  calculateRoomTotals(components: Array<{ operation: MeasurementOperation; area: Prisma.Decimal }>, wastePercentage: number = 0) {
-    let netArea = new Prisma.Decimal(0);
+  calculateRoomTotals(
+    components: Array<{ operation: MeasurementOperation; area: Prisma.Decimal }>,
+    wastePercentage: number = 0,
+  ) {
+    let grossArea = new Prisma.Decimal(0);
+    let deductions = new Prisma.Decimal(0);
 
     for (const comp of components) {
       if (comp.operation === "ADD") {
-        netArea = netArea.add(comp.area);
+        grossArea = grossArea.add(comp.area);
       } else if (comp.operation === "DEDUCT") {
-        netArea = netArea.sub(comp.area);
+        deductions = deductions.add(comp.area);
       }
     }
+
+    let netArea = grossArea.sub(deductions);
 
     if (netArea.lessThan(0)) {
       throw new BadRequestException("Net area cannot be negative (deductions exceed additions)");
     }
 
     netArea = new Prisma.Decimal(netArea.toFixed(4));
-    const grossArea = netArea; 
-    
+    grossArea = new Prisma.Decimal(grossArea.toFixed(4));
+    deductions = new Prisma.Decimal(deductions.toFixed(4));
+
     if (wastePercentage < 0 || !Number.isFinite(wastePercentage)) {
       throw new BadRequestException("Invalid wastePercentage");
     }
-    
+
     const wasteFactor = new Prisma.Decimal(1).add(new Prisma.Decimal(wastePercentage).div(100));
     const wasteAdjustedArea = new Prisma.Decimal(netArea.mul(wasteFactor).toFixed(4));
 
     return {
+      deductions,
       netArea,
       grossArea,
       wasteAdjustedArea,

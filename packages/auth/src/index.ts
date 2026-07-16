@@ -96,5 +96,9 @@ export const hasPermission = (
     return false;
   }
 
+  if (membership.isOwner || membership.roleKeys.includes("BUSINESS_OWNER")) {
+    return true;
+  }
+
   return membership.permissions.includes(permission);
 };

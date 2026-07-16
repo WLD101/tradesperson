@@ -31,12 +31,13 @@ describe("AreaCalculatorService", () => {
   test("5. Multiple additions", () => {
     const r1 = service.calculateComponentArea({ type: "RECTANGLE", length: 5, width: 4 }); // 20
     const r2 = service.calculateComponentArea({ type: "RECTANGLE", length: 2, width: 2 }); // 4
-    const { netArea, grossArea } = service.calculateRoomTotals([
+    const { netArea, grossArea, deductions } = service.calculateRoomTotals([
       { operation: "ADD", area: r1 },
       { operation: "ADD", area: r2 },
     ]);
     expect(netArea.toNumber()).toBe(24);
     expect(grossArea.toNumber()).toBe(24);
+    expect(deductions.toNumber()).toBe(0);
   });
 
   test("6. Alcove", () => {
@@ -54,13 +55,14 @@ describe("AreaCalculatorService", () => {
     const alcove = service.calculateComponentArea({ type: "ALCOVE", length: 1, width: 2 }); // 2
     const column = service.calculateComponentArea({ type: "COLUMN", length: 0.5, width: 0.5 }); // 0.25
 
-    const { netArea, grossArea } = service.calculateRoomTotals([
+    const { netArea, grossArea, deductions } = service.calculateRoomTotals([
       { operation: "ADD", area: r1 },
       { operation: "ADD", area: alcove },
       { operation: "DEDUCT", area: column },
     ]);
     expect(netArea.toNumber()).toBe(21.75);
-    expect(grossArea.toNumber()).toBe(21.75);
+    expect(grossArea.toNumber()).toBe(22);
+    expect(deductions.toNumber()).toBe(0.25);
   });
 
   test("9. Waste at 0%", () => {
@@ -119,5 +121,36 @@ describe("AreaCalculatorService", () => {
   test("17. Excessive input rejection", () => {
     expect(() => service.calculateComponentArea({ type: "RECTANGLE", length: 5000, width: 4 }))
       .toThrow("Invalid dimension length: must be positive, finite, and reasonable (<1000)");
+  });
+
+  test("18. Stair area", () => {
+    const result = service.calculateComponentArea({
+      type: "STAIR",
+      width: 1,
+      tread: 0.25,
+      riser: 0.18,
+      count: 12,
+    });
+    expect(result.toNumber()).toBe(5.16);
+  });
+
+  test("19. Landing area", () => {
+    const result = service.calculateComponentArea({ type: "LANDING", length: 1.8, width: 0.9 });
+    expect(result.toNumber()).toBe(1.62);
+  });
+
+  test("20. Corridor area", () => {
+    const result = service.calculateComponentArea({ type: "CORRIDOR", length: 5.5, width: 1.2 });
+    expect(result.toNumber()).toBe(6.6);
+  });
+
+  test("21. Non-finite values are rejected", () => {
+    expect(() => service.calculateComponentArea({ type: "RECTANGLE", length: Number.POSITIVE_INFINITY, width: 2 }))
+      .toThrow("Invalid dimension length: must be positive, finite, and reasonable (<1000)");
+  });
+
+  test("22. Negative waste is rejected", () => {
+    const area = service.calculateComponentArea({ type: "RECTANGLE", length: 2, width: 2 });
+    expect(() => service.calculateRoomTotals([{ operation: "ADD", area }], -1)).toThrow("Invalid wastePercentage");
   });
 });

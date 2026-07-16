@@ -494,11 +494,11 @@ export const signInThroughApi = async (
 
   if (response.status !== 201) {
     throw new Error(
-      `Failed to sign in ${email}: ${response.status} ${JSON.stringify(response.body)}`,
+      `Failed to sign in ${email}: ${response.status} ${JSON.stringify(response.rawBody)}`,
     );
   }
 
-  return response.body.data as {
+  return response.body as {
     activeTenantId: string | null;
     activeBranchId: string | null;
   };

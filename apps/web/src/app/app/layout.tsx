@@ -10,6 +10,7 @@ const nav = [
   { href: "/app/crm/sites", label: "Sites" },
   { href: "/app/crm/surveys", label: "Surveys" },
   { href: "/app/catalogue", label: "Catalogue" },
+  { href: "/app/suppliers", label: "Suppliers" },
   { href: "/app/settings/business", label: "Business" },
   { href: "/app/settings/branches", label: "Branches" },
   { href: "/app/settings/users", label: "Users" },

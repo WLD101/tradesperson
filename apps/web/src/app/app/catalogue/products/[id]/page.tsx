@@ -105,9 +105,39 @@ export default async function ProductDetailPage({
   const session = await getSession();
   const permissions = getCataloguePermissions(session);
   const { id } = await params;
-  const [product, lookups] = await Promise.all([
+  const [product, lookups, suppliers] = await Promise.all([
     apiFetch<ProductDetail>(`/api/v1/catalogue/products/${id}`),
     fetchCatalogueLookups(),
+    apiFetch<
+      Array<{
+        id: string;
+        supplierSku: string;
+        packCoverageM2: string | null;
+        rollWidthM: string | null;
+        minimumOrderQty: string | null;
+        leadTimeDays: number | null;
+        preferredSupplier: boolean;
+        status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
+        lastConfirmedAt: string | null;
+        supplier: {
+          id: string;
+          legalName: string;
+          tradingName: string | null;
+          supplierCode: string;
+        };
+        variant: {
+          id: string;
+          name: string;
+          sku: string;
+        } | null;
+        supplierUnit: {
+          id: string;
+          name: string;
+          code: string;
+          symbol: string | null;
+        } | null;
+      }>
+    >(`/api/v1/catalogue/products/${id}/suppliers`),
   ]);
 
   return (
@@ -423,6 +453,72 @@ export default async function ProductDetailPage({
               </form>
             </div>
           ) : null}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Linked suppliers</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Supplier pricing is intentionally deferred to Phase C.
+            </p>
+          </div>
+          <p className="text-sm text-slate-500">{suppliers.length} linked</p>
+        </div>
+        <div className="mt-4 space-y-3">
+          {suppliers.length ? (
+            suppliers.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-xl border border-slate-200 px-4 py-4 text-sm"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      {item.supplier.tradingName ?? item.supplier.legalName}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {item.supplier.supplierCode} • {item.supplierSku}
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {item.status}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  <p className="text-slate-600">
+                    Variant: {item.variant ? `${item.variant.name} (${item.variant.sku})` : "Product default"}
+                  </p>
+                  <p className="text-slate-600">
+                    Unit: {item.supplierUnit ? `${item.supplierUnit.name} (${item.supplierUnit.code})` : "Not set"}
+                  </p>
+                  <p className="text-slate-600">
+                    Lead time: {item.leadTimeDays == null ? "Not set" : `${item.leadTimeDays} days`}
+                  </p>
+                  <p className="text-slate-600">
+                    Minimum order: {item.minimumOrderQty ?? "Not set"}
+                  </p>
+                  <p className="text-slate-600">
+                    Roll width: {item.rollWidthM ?? "Not set"}
+                  </p>
+                  <p className="text-slate-600">
+                    Pack coverage: {item.packCoverageM2 ?? "Not set"}
+                  </p>
+                  <p className="text-slate-600">
+                    Preferred: {item.preferredSupplier ? "Yes" : "No"}
+                  </p>
+                  <p className="text-slate-600">
+                    Last confirmed: {item.lastConfirmedAt ? item.lastConfirmedAt.slice(0, 10) : "Not set"}
+                  </p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-lg border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500">
+              No supplier links yet. Price history will be added in Phase C.
+            </div>
+          )}
         </div>
       </Card>
     </div>

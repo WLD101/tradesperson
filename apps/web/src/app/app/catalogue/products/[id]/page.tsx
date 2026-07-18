@@ -6,6 +6,7 @@ import {
   getCataloguePermissions,
   type ProductDetail,
 } from "@/lib/catalogue";
+import { getSupplierPermissions, type ProductCurrentSupplierPrice } from "@/lib/suppliers";
 
 async function archiveProduct(formData: FormData) {
   "use server";
@@ -104,8 +105,9 @@ export default async function ProductDetailPage({
 }) {
   const session = await getSession();
   const permissions = getCataloguePermissions(session);
+  const supplierPermissions = getSupplierPermissions(session);
   const { id } = await params;
-  const [product, lookups, suppliers] = await Promise.all([
+  const [product, lookups, suppliers, currentSupplierPrices] = await Promise.all([
     apiFetch<ProductDetail>(`/api/v1/catalogue/products/${id}`),
     fetchCatalogueLookups(),
     apiFetch<
@@ -138,6 +140,11 @@ export default async function ProductDetailPage({
         } | null;
       }>
     >(`/api/v1/catalogue/products/${id}/suppliers`),
+    supplierPermissions.canViewPricing
+      ? apiFetch<ProductCurrentSupplierPrice[]>(
+          `/api/v1/catalogue/products/${id}/current-supplier-prices`,
+        )
+      : Promise.resolve([]),
   ]);
 
   return (
@@ -453,6 +460,66 @@ export default async function ProductDetailPage({
               </form>
             </div>
           ) : null}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">
+              Current supplier pricing
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Internal-only supplier cost visibility. Customer-facing pricing remains outside this route.
+            </p>
+          </div>
+          <p className="text-sm text-slate-500">
+            {currentSupplierPrices.length} supplier records
+          </p>
+        </div>
+
+        <div className="mt-4 space-y-4">
+          {supplierPermissions.canViewPricing ? (
+            currentSupplierPrices.length ? (
+              currentSupplierPrices.map((entry) => (
+                <div
+                  key={entry.supplierProductId}
+                  className="rounded-xl border border-slate-200 px-4 py-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-950">
+                        {entry.supplier.tradingName ?? entry.supplier.legalName}
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {entry.supplierSku} • {entry.supplierUnit?.code ?? "No unit"} • {entry.preferredSupplier ? "Preferred" : "Standard"}
+                      </p>
+                    </div>
+                    <div className="text-right text-sm text-slate-700">
+                      <p>
+                        {entry.selectedPrice
+                          ? `${entry.selectedPrice.currency} ${entry.selectedPrice.baseCost}`
+                          : "No current price"}
+                      </p>
+                      <p>
+                        {entry.selectedPrice
+                          ? `${entry.selectedPrice.priceBasis} • effective ${new Date(entry.selectedPrice.effectiveDate).toLocaleDateString()}`
+                          : "Awaiting approved active price"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500">
+                No current supplier prices are available for this product yet.
+              </div>
+            )
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-500">
+              You do not have permission to view raw supplier cost data.
+            </div>
+          )}
         </div>
       </Card>
 

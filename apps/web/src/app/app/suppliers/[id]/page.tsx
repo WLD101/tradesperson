@@ -204,12 +204,22 @@ export default async function SupplierDetailPage({
           </p>
         </div>
         {permissions.canManage ? (
-          <Link
-            href={`/app/suppliers/${supplier.id}/edit`}
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Edit supplier
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            {permissions.canViewPricing ? (
+              <Link
+                href={`/app/suppliers/${supplier.id}/pricing`}
+                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Pricing
+              </Link>
+            ) : null}
+            <Link
+              href={`/app/suppliers/${supplier.id}/edit`}
+              className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Edit supplier
+            </Link>
+          </div>
         ) : null}
       </div>
 
@@ -253,7 +263,7 @@ export default async function SupplierDetailPage({
         <Card>
           <h2 className="text-lg font-semibold text-slate-950">Lifecycle</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Supplier records stay tenant-owned. Price history will be added in Phase C.
+            Supplier records stay tenant-owned. Pricing, history, and import preview now live on the Phase C pricing route.
           </p>
           <div className="mt-4 space-y-3">
             <p className="text-sm text-slate-700">

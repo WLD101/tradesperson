@@ -21,11 +21,12 @@ export async function clientApiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  const isFormData = init?.body instanceof FormData;
   const response = await fetch(`${clientApiUrl}${path}`, {
     ...init,
     headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {}),
+      ...(isFormData ? {} : { "content-type": "application/json" }),
+      ...((init?.headers ?? {}) as HeadersInit),
     },
     credentials: "include",
     cache: "no-store",

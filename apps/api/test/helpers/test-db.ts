@@ -25,7 +25,9 @@ const getAdminConnectionString = (databaseUrl: string) => {
 };
 
 export const recreateTestDatabase = async () => {
-  const { databaseUrl, testDbName } = ensureTestEnv();
+  const { databaseUrl, testDbName } = ensureTestEnv({
+    requireExplicitDatabaseUrl: true,
+  });
   const client = new Client({
     connectionString: getAdminConnectionString(databaseUrl!),
   });
@@ -56,6 +58,9 @@ export const recreateTestDatabase = async () => {
 };
 
 export const resetDatabase = async () => {
+  ensureTestEnv({
+    requireExplicitDatabaseUrl: true,
+  });
   const rows = await prisma.$queryRaw<Array<{ tablename: string }>>`
     SELECT tablename
     FROM pg_tables

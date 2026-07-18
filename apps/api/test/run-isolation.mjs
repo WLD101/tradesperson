@@ -13,7 +13,7 @@ function getAvailablePort() {
   });
 }
 
-function waitForHealth(url, maxRetries = 30) {
+function waitForHealth(url, maxRetries = 120, intervalMs = 500) {
   return new Promise((resolve, reject) => {
     let retries = 0;
     const interval = setInterval(async () => {
@@ -29,9 +29,13 @@ function waitForHealth(url, maxRetries = 30) {
       retries++;
       if (retries >= maxRetries) {
         clearInterval(interval);
-        reject(new Error("Timeout waiting for API health"));
+        reject(
+          new Error(
+            `Timeout waiting for API health after ${maxRetries * intervalMs}ms`,
+          ),
+        );
       }
-    }, 500);
+    }, intervalMs);
   });
 }
 

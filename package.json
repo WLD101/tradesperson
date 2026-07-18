@@ -9,6 +9,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:api:full": "pnpm --filter @tradesperson/api test:full",
+    "test:api:db": "pnpm --filter @tradesperson/api test:db",
     "test:isolation": "pnpm --filter @tradesperson/api test:isolation",
     "test:e2e": "turbo run test:e2e",
     "format": "prettier --write .",

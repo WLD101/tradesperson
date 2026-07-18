@@ -2,6 +2,7 @@ import "./helpers/test-env";
 import assert from "node:assert/strict";
 import {
   disconnectDatabase,
+  prisma,
   recreateTestDatabase,
   resetDatabase,
 } from "./helpers/test-db";
@@ -33,12 +34,14 @@ class HttpClient {
   post(path: string) {
     return {
       send: (body?: unknown) => this.request("POST", path, body),
+      sendFormData: (body: FormData) => this.request("POST", path, body),
     };
   }
 
   patch(path: string) {
     return {
       send: (body?: unknown) => this.request("PATCH", path, body),
+      sendFormData: (body: FormData) => this.request("PATCH", path, body),
     };
   }
 
@@ -53,13 +56,18 @@ class HttpClient {
   }
 
   private async request(method: string, path: string, body?: unknown) {
+    const isFormData = body instanceof FormData;
     const response = await fetch(`${this.origin}${path}`, {
       method,
       headers: {
-        "content-type": "application/json",
+        ...(isFormData ? {} : { "content-type": "application/json" }),
         ...(this.cookieHeader ? { cookie: this.cookieHeader } : {}),
       },
-      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...(body !== undefined
+        ? {
+            body: isFormData ? body : JSON.stringify(body),
+          }
+        : {}),
     });
 
     const setCookies =
@@ -87,6 +95,100 @@ let ownerBAgent: HttpClient;
 let branchA1Agent: HttpClient;
 let staffAAgent: HttpClient;
 let fixtures: IsolationFixtureSet;
+
+const buildImportFormData = (csvText: string) => {
+  const formData = new FormData();
+  formData.append(
+    "file",
+    new Blob([csvText], { type: "text/csv" }),
+    "supplier-prices.csv",
+  );
+  return formData;
+};
+
+const supplierPricingCsv =
+  "supplier sku,price basis,currency,base cost,effective date\nSUP-A-CARPET-001,ROLL,GBP,12.5000,2026-07-18\n";
+
+const createPriceImport = async (
+  agent: HttpClient,
+  supplierId: string,
+  csvText = supplierPricingCsv,
+) => {
+  const response = await agent
+    .post(`/api/v1/suppliers/${supplierId}/price-imports`)
+    .sendFormData(buildImportFormData(csvText));
+  assert.equal(response.status, 201);
+  return response.body as { id: string };
+};
+
+const getPriceImportRows = async (
+  agent: HttpClient,
+  supplierId: string,
+  importId: string,
+) => {
+  const response = await agent.get(
+    `/api/v1/suppliers/${supplierId}/price-imports/${importId}/rows`,
+  );
+  assert.equal(response.status, 200);
+  return response.body.items as Array<{ id: string }>;
+};
+
+const applyImportMapping = async (
+  agent: HttpClient,
+  supplierId: string,
+  importId: string,
+) => {
+  const response = await agent.patch(
+    `/api/v1/suppliers/${supplierId}/price-imports/${importId}/mapping`,
+  ).send({
+    mapping: buildSavedMapping().mapping,
+  });
+  assert.equal(response.status, 200);
+};
+
+const executeImportLifecycle = async (
+  agent: HttpClient,
+  supplierId: string,
+  importId: string,
+) => {
+  const validateResponse = await agent.post(
+    `/api/v1/suppliers/${supplierId}/price-imports/${importId}/validate`,
+  ).send({});
+  assert.equal(validateResponse.status, 201);
+
+  const approveResponse = await agent.post(
+    `/api/v1/suppliers/${supplierId}/price-imports/${importId}/approve`,
+  ).send({});
+  assert.equal(approveResponse.status, 201);
+
+  const executeResponse = await agent.post(
+    `/api/v1/suppliers/${supplierId}/price-imports/${importId}/execute`,
+  ).send({});
+  assert.equal(executeResponse.status, 201);
+
+  return executeResponse.body as { id: string; priceListId: string };
+};
+
+const buildSavedMapping = () => ({
+  name: "Standard CSV mapping",
+  fileType: "CSV",
+  mapping: {
+    headers: [
+      "supplier sku",
+      "price basis",
+      "currency",
+      "base cost",
+      "effective date",
+    ],
+    columns: {
+      supplierSku: "supplier sku",
+      priceBasis: "price basis",
+      currency: "currency",
+      baseCost: "base cost",
+      effectiveDate: "effective date",
+    },
+  },
+});
 
 const startServer = async () => {
   // Server is started externally by run-isolation.mjs
@@ -306,6 +408,391 @@ const tests: TestCase[] = [
         countryCode: "GB",
       });
       assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "supplier pricing view requires explicit permission",
+    run: async () => {
+      const response = await staffAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-lists`,
+      );
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "supplier pricing import requires explicit permission",
+    run: async () => {
+      const response = await staffAAgent
+        .post(`/api/v1/suppliers/${fixtures.supplierA.id}/price-imports`)
+        .sendFormData(
+          buildImportFormData(
+            "supplier sku,price basis,currency,base cost,effective date\nSUP-A-CARPET-001,ROLL,GBP,12.5000,2026-07-18\n",
+          ),
+        );
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "tenant A cannot create import for tenant B supplier",
+    run: async () => {
+      const response = await ownerAAgent
+        .post(`/api/v1/suppliers/${fixtures.supplierB.id}/price-imports`)
+        .sendFormData(
+          buildImportFormData(
+            "supplier sku,price basis,currency,base cost,effective date\nSUP-B-LVT-001,PACK,GBP,38.7500,2026-07-18\n",
+          ),
+        );
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot list tenant B imports",
+    run: async () => {
+      const created = await ownerBAgent
+        .post(`/api/v1/suppliers/${fixtures.supplierB.id}/price-imports`)
+        .sendFormData(
+          buildImportFormData(
+            "supplier sku,price basis,currency,base cost,effective date\nSUP-B-LVT-001,PACK,GBP,38.7500,2026-07-18\n",
+          ),
+        );
+      assert.equal(created.status, 201);
+
+      const response = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-imports`,
+      );
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot read tenant B import rows",
+    run: async () => {
+      const created = await createPriceImport(
+        ownerBAgent,
+        fixtures.supplierB.id,
+        "supplier sku,price basis,currency,base cost,effective date\nSUP-B-LVT-001,PACK,GBP,38.7500,2026-07-18\n",
+      );
+
+      const response = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-imports/${created.id}/rows`,
+      );
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot read tenant B import detail",
+    run: async () => {
+      const created = await createPriceImport(
+        ownerBAgent,
+        fixtures.supplierB.id,
+        "supplier sku,price basis,currency,base cost,effective date\nSUP-B-LVT-001,PACK,GBP,38.7500,2026-07-18\n",
+      );
+
+      const response = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-imports/${created.id}`,
+      );
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot cancel tenant B import",
+    run: async () => {
+      const created = await createPriceImport(
+        ownerBAgent,
+        fixtures.supplierB.id,
+        "supplier sku,price basis,currency,base cost,effective date\nSUP-B-LVT-001,PACK,GBP,38.7500,2026-07-18\n",
+      );
+
+      const response = await ownerAAgent.post(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-imports/${created.id}/cancel`,
+      ).send({});
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "supplier pricing approval requires explicit permission",
+    run: async () => {
+      const created = await createPriceImport(ownerAAgent, fixtures.supplierA.id);
+      await applyImportMapping(ownerAAgent, fixtures.supplierA.id, created.id);
+      const validated = await ownerAAgent.post(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}/validate`,
+      ).send({});
+      assert.equal(validated.status, 201);
+
+      const response = await staffAAgent.post(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}/approve`,
+      ).send({});
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "supplier pricing execution requires explicit permission",
+    run: async () => {
+      const created = await createPriceImport(ownerAAgent, fixtures.supplierA.id);
+      await applyImportMapping(ownerAAgent, fixtures.supplierA.id, created.id);
+      const validated = await ownerAAgent.post(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}/validate`,
+      ).send({});
+      assert.equal(validated.status, 201);
+      const approved = await ownerAAgent.post(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}/approve`,
+      ).send({});
+      assert.equal(approved.status, 201);
+
+      const response = await staffAAgent.post(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}/execute`,
+      ).send({});
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "tenant A cannot list tenant B saved price import mappings",
+    run: async () => {
+      const created = await ownerBAgent.post(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-import-mappings`,
+      ).send(buildSavedMapping());
+      assert.equal(created.status, 201);
+
+      const response = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-import-mappings`,
+      );
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot update tenant B saved price import mapping",
+    run: async () => {
+      const created = await ownerBAgent.post(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-import-mappings`,
+      ).send(buildSavedMapping());
+      assert.equal(created.status, 201);
+
+      const response = await ownerAAgent.patch(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-import-mappings/${created.body.id}`,
+      ).send({
+        mapping: buildSavedMapping().mapping,
+      });
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "supplier A cannot use supplier B saved price import mapping id",
+    run: async () => {
+      const created = await ownerAAgent.post(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-import-mappings`,
+      ).send(buildSavedMapping());
+      assert.equal(created.status, 404);
+
+      const ownerBCreated = await ownerBAgent.post(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-import-mappings`,
+      ).send(buildSavedMapping());
+      assert.equal(ownerBCreated.status, 201);
+
+      const response = await ownerAAgent.patch(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-import-mappings/${ownerBCreated.body.id}`,
+      ).send({
+        mapping: buildSavedMapping().mapping,
+      });
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot manually match tenant B product into tenant A import row",
+    run: async () => {
+      const created = await createPriceImport(
+        ownerAAgent,
+        fixtures.supplierA.id,
+        "supplier sku,price basis,currency,base cost,effective date\nUNKNOWN-SKU,ROLL,GBP,12.5000,2026-07-18\n",
+      );
+      const rows = await getPriceImportRows(ownerAAgent, fixtures.supplierA.id, created.id);
+
+      const response = await ownerAAgent.patch(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}/rows/${rows[0]?.id}/match`,
+      ).send({
+        productId: fixtures.productB.id,
+      });
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot manually match tenant B variant into tenant A import row",
+    run: async () => {
+      const created = await createPriceImport(
+        ownerAAgent,
+        fixtures.supplierA.id,
+        "supplier sku,price basis,currency,base cost,effective date\nUNKNOWN-SKU,ROLL,GBP,12.5000,2026-07-18\n",
+      );
+      const rows = await getPriceImportRows(ownerAAgent, fixtures.supplierA.id, created.id);
+      const tenantBVariant = await prisma.productVariant.create({
+        data: {
+          tenantId: fixtures.tenantB.id,
+          productId: fixtures.productB.id,
+          unitOfMeasureId: fixtures.unitB.id,
+          name: "Tenant B Default Variant",
+          sku: "B-LVT-001-DEF",
+          isDefault: true,
+        },
+      });
+
+      const response = await ownerAAgent.patch(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}/rows/${rows[0]?.id}/match`,
+      ).send({
+        variantId: tenantBVariant.id,
+      });
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "tenant A cannot manually match tenant B supplier product into tenant A import row",
+    run: async () => {
+      const created = await createPriceImport(
+        ownerAAgent,
+        fixtures.supplierA.id,
+        "supplier sku,price basis,currency,base cost,effective date\nUNKNOWN-SKU,ROLL,GBP,12.5000,2026-07-18\n",
+      );
+      const rows = await getPriceImportRows(ownerAAgent, fixtures.supplierA.id, created.id);
+
+      const response = await ownerAAgent.patch(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}/rows/${rows[0]?.id}/match`,
+      ).send({
+        supplierProductId: fixtures.supplierProductB.id,
+      });
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "manual matching rejects a mismatched product and variant relationship",
+    run: async () => {
+      const created = await createPriceImport(
+        ownerAAgent,
+        fixtures.supplierA.id,
+        "supplier sku,price basis,currency,base cost,effective date\nUNKNOWN-SKU,ROLL,GBP,12.5000,2026-07-18\n",
+      );
+      const rows = await getPriceImportRows(ownerAAgent, fixtures.supplierA.id, created.id);
+      const secondProduct = await prisma.product.create({
+        data: {
+          tenantId: fixtures.tenantA.id,
+          categoryId: fixtures.categoryA.id,
+          manufacturerId: fixtures.manufacturerA.id,
+          primaryUnitId: fixtures.unitA.id,
+          name: "Tenant A Secondary Product",
+          slug: "tenant-a-secondary-product",
+          sku: "A-CARPET-SECONDARY",
+        },
+      });
+      const secondVariant = await prisma.productVariant.create({
+        data: {
+          tenantId: fixtures.tenantA.id,
+          productId: secondProduct.id,
+          unitOfMeasureId: fixtures.unitA.id,
+          name: "Secondary Default",
+          sku: "A-CARPET-SECONDARY-DEF",
+          isDefault: true,
+        },
+      });
+
+      const response = await ownerAAgent.patch(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}/rows/${rows[0]?.id}/match`,
+      ).send({
+        productId: fixtures.productA.id,
+        variantId: secondVariant.id,
+      });
+      assert.equal(response.status, 400);
+    },
+  },
+  {
+    name: "tenant A cannot read tenant B price lists, versions, or price history",
+    run: async () => {
+      const created = await createPriceImport(
+        ownerBAgent,
+        fixtures.supplierB.id,
+        "supplier sku,price basis,currency,base cost,effective date\nSUP-B-LVT-001,PACK,GBP,38.7500,2026-07-18\n",
+      );
+      await applyImportMapping(ownerBAgent, fixtures.supplierB.id, created.id);
+      const executed = await executeImportLifecycle(
+        ownerBAgent,
+        fixtures.supplierB.id,
+        created.id,
+      );
+
+      const priceLists = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-lists`,
+      );
+      assert.equal(priceLists.status, 404);
+
+      const listDetail = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-lists/${executed.priceListId}`,
+      );
+      assert.equal(listDetail.status, 404);
+
+      const versions = await ownerBAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-lists/${executed.priceListId}/versions`,
+      );
+      assert.equal(versions.status, 200);
+      const versionId = versions.body[0].id;
+
+      const versionDetail = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/price-lists/${executed.priceListId}/versions/${versionId}`,
+      );
+      assert.equal(versionDetail.status, 404);
+
+      const history = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierB.id}/products/${fixtures.supplierProductB.id}/price-history`,
+      );
+      assert.equal(history.status, 404);
+    },
+  },
+  {
+    name: "same-tenant pricing import lifecycle creates a version and history",
+    run: async () => {
+      const created = await createPriceImport(ownerAAgent, fixtures.supplierA.id);
+      const mappingResponse = await ownerAAgent.patch(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}/mapping`,
+      ).send({
+        mapping: buildSavedMapping().mapping,
+      });
+      assert.equal(mappingResponse.status, 200);
+
+      const importDetail = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-imports/${created.id}`,
+      );
+      assert.equal(importDetail.status, 200);
+
+      const executed = await executeImportLifecycle(
+        ownerAAgent,
+        fixtures.supplierA.id,
+        created.id,
+      );
+
+      const priceList = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-lists/${executed.priceListId}`,
+      );
+      assert.equal(priceList.status, 200);
+
+      const versions = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/price-lists/${executed.priceListId}/versions`,
+      );
+      assert.equal(versions.status, 200);
+      assert.equal(versions.body.length, 1);
+
+      const history = await ownerAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/products/${fixtures.supplierProductA.id}/price-history`,
+      );
+      assert.equal(history.status, 200);
+      assert.equal(history.body.length, 1);
+    },
+  },
+  {
+    name: "user without pricing view permission cannot read raw supplier cost routes",
+    run: async () => {
+      const productPrices = await staffAAgent.get(
+        `/api/v1/catalogue/products/${fixtures.productA.id}/current-supplier-prices`,
+      );
+      assert.equal(productPrices.status, 403);
+
+      const history = await staffAAgent.get(
+        `/api/v1/suppliers/${fixtures.supplierA.id}/products/${fixtures.supplierProductA.id}/price-history`,
+      );
+      assert.equal(history.status, 403);
     },
   },
   {

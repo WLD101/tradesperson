@@ -1,12 +1,57 @@
 import { randomUUID } from "node:crypto";
 
 const testDbName = "tradesperson_erp_isolation_test";
+const defaultTestDatabaseUrl = `postgresql://postgres:postgres@localhost:55432/${testDbName}`;
 
-export const ensureTestEnv = () => {
+type EnsureTestEnvOptions = {
+  requireExplicitDatabaseUrl?: boolean;
+};
+
+export const assertSafeTestDatabaseUrl = (databaseUrl: string) => {
+  if (!databaseUrl.trim()) {
+    throw new Error("Refusing to use an empty test database URL.");
+  }
+
+  let url: URL;
+  try {
+    url = new URL(databaseUrl);
+  } catch {
+    throw new Error(`Refusing to use malformed test database URL: ${databaseUrl}.`);
+  }
+
+  const databaseName = url.pathname.replace(/^\//, "").trim();
+
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error(
+      `Refusing to use test database helpers outside NODE_ENV=test. Received NODE_ENV=${process.env.NODE_ENV ?? "<unset>"}.`,
+    );
+  }
+
+  if (!databaseName) {
+    throw new Error(
+      `Refusing to use test database URL without a database name: ${databaseUrl}.`,
+    );
+  }
+
+  if (databaseName !== testDbName || !databaseName.includes("test")) {
+    throw new Error(
+      `Refusing to use non-test database URL: ${databaseUrl}. Expected database ${testDbName}.`,
+    );
+  }
+};
+
+export const ensureTestEnv = (options: EnsureTestEnvOptions = {}) => {
+  const { requireExplicitDatabaseUrl = false } = options;
   process.env.NODE_ENV = "test";
+
+  if (requireExplicitDatabaseUrl && !process.env.DATABASE_URL) {
+    throw new Error(
+      "Refusing to use destructive test database helpers without an explicit DATABASE_URL.",
+    );
+  }
+
   process.env.DATABASE_URL =
-    process.env.DATABASE_URL ??
-    `postgresql://postgres:postgres@localhost:55432/${testDbName}`;
+    process.env.DATABASE_URL ?? defaultTestDatabaseUrl;
   process.env.DIRECT_URL =
     process.env.DIRECT_URL ??
     process.env.DATABASE_URL;
@@ -38,9 +83,13 @@ export const ensureTestEnv = () => {
   process.env.MAIL_FROM =
     process.env.MAIL_FROM ?? "noreply@tradesperson.local";
 
+  assertSafeTestDatabaseUrl(process.env.DATABASE_URL);
+  assertSafeTestDatabaseUrl(process.env.DIRECT_URL);
+
   return {
     databaseUrl: process.env.DATABASE_URL,
     directUrl: process.env.DIRECT_URL,
+    defaultTestDatabaseUrl,
     testDbName,
   };
 };

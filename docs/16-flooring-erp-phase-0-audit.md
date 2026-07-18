@@ -1,6 +1,6 @@
 # Flooring ERP Phase 0 Audit
 
-Date: 2026-07-16
+Date: 2026-07-18
 
 Scope: repository audit and gap analysis for the UK multi-tenant Tradesperson Network Flooring ERP.
 
@@ -73,7 +73,7 @@ Status labels used in this document:
   - stock concurrency
   - end-to-end flooring journeys
 - Survey domain (Survey, Rooms, Measurements) exists and is verified, but it is still missing photos, signatures, appointments, and mobile/offline capabilities.
-- Product Catalogue Phase A exists and is verified, and Supplier Domain Phase B now exists as a verified foundation, but supplier pricing, imports, purchasing workflows, and document/image uploads remain deferred.
+- Product Catalogue Phase A exists and is verified, Supplier Domain Phase B exists as a verified foundation, and Supplier Pricing Phase C is now implemented and closure-verified with DB-backed validation on Saturday, July 18, 2026.
 
 ### Missing
 
@@ -145,13 +145,13 @@ Status labels used in this document:
 | Surveys | Existing and verified | Survey lifecycle, room management, and locking rules present |
 | Measurements | Existing and verified | Server-authoritative area calculations and component CRUD present |
 | Product catalogue | Existing and verified | Phase A tenant-owned catalogue domain and functional UI present |
-| Pricing | Missing | No price history or rules |
+| Pricing | Existing and verified | Supplier price lists, versions, imports, import mappings, manual matching, execution idempotency, rollback safety, price history, and pricing UI now exist with DB-backed closure proof |
 | Estimates | Missing | No estimate model or engine |
 | Quotations | Missing | No quote versions or acceptance |
 | Contracts | Missing | No contract model |
 | Sales orders | Missing | No conversion workflow |
 | Purchasing | Missing | No requisitions, POs, receipts |
-| Suppliers | Existing but incomplete | Supplier master data, contacts, and supplier-product links now exist; pricing and purchasing do not |
+| Suppliers | Existing but incomplete | Supplier master data, contacts, supplier-product links, and supplier pricing foundations now exist; purchasing does not |
 | Inventory | Missing | No warehouses, stock items, rolls, remnants |
 | Jobs | Missing | No job lifecycle |
 | Scheduling | Missing | No calendar or assignments |

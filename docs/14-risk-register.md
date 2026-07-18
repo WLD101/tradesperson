@@ -12,3 +12,4 @@
 | Document and signature storage exposure         | High     | signed URLs, private buckets, access policies                           |
 | ERP UI becoming slow under dense tables         | Medium   | server pagination, query optimization, TanStack Table patterns          |
 | Platform support overreach into tenant data     | High     | explicit support grant, time-bound impersonation, audit logs            |
+| Supplier spreadsheet workflows drifting into cross-supplier leakage | High | tenant-safe mapping ownership, supplier-scoped mappings, supplier ownership checks, and isolation coverage for import detail, matching, approval, execution, and price-list/history access |

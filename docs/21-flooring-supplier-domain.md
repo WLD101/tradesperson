@@ -1,6 +1,6 @@
 # Flooring Supplier Domain Foundation
 
-Prepared: July 16, 2026
+Prepared: July 18, 2026
 
 ## Scope
 Phase B delivers the first supplier-domain foundation for the flooring ERP inside the existing Tradesperson Network monorepo. It adds tenant-owned supplier master data, supplier contacts, supplier-product links, archive support, product-side supplier visibility, demo seed data, and functional supplier management screens.
@@ -119,31 +119,29 @@ The demo seed now includes fictional UK flooring suppliers and linked product ex
 This gives the local environment realistic supplier-product examples without introducing live commercial pricing.
 
 ## Verification
-Verified on July 16, 2026 with:
+Verified on July 18, 2026 with:
 - Prisma schema format and client generation
 - API typecheck
 - web typecheck
 - DB typecheck
 - tenant-isolation integration suite
 
-The tenant-isolation suite now runs 22 cases and includes supplier-domain coverage for:
+The tenant-isolation suite now runs 41 cases in the authoritative compiled suite and includes supplier-domain coverage for:
 - cross-tenant supplier retrieval
 - cross-tenant branch references
 - cross-tenant supplier-product linking
 - supplier permission enforcement
+- supplier pricing import, mapping, approval, execution, and price visibility isolation
 
 ## Known Limitations
-- No supplier price lists yet
-- No price history yet
-- No CSV/XLSX supplier import workflow yet
+- Phase C pricing now exists separately in `docs/22-flooring-supplier-pricing-domain.md`
+- Phase B itself still does not own purchase orders, goods receipt, or stock movement workflows
 - No supplier documents or certificates workflow yet
 - No purchase orders, receipts, or stock movement integration yet
 - No AP ledger or invoice reconciliation yet
 
 ## Next Dependencies
 The next procurement path should build in this order:
-1. Supplier price lists and price history
-2. Spreadsheet import preview and validation
-3. Purchase orders and approval flow
-4. Goods receipt and discrepancy handling
-5. Warehouse, roll, remnant, and stock movement models
+1. Begin Phase D procurement foundation with purchase requisitions and purchase orders
+2. Add goods receipt and discrepancy handling
+3. Add warehouse, roll, remnant, and stock movement models

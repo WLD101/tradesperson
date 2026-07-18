@@ -64,6 +64,8 @@ tests/
   `pnpm typecheck`
 - Tests:
   `pnpm test`
+- Full API test chain:
+  `pnpm test:api:full`
 - Playwright:
   `pnpm test:e2e`
 - Production build:
@@ -87,6 +89,7 @@ tests/
 - [Product Catalogue Phase A Proposal](./docs/19-product-catalogue-phase-a-proposal.md)
 - [Flooring Product Catalogue Domain](./docs/20-flooring-product-catalogue-domain.md)
 - [Flooring Supplier Domain Foundation](./docs/21-flooring-supplier-domain.md)
+- [Flooring Supplier Pricing Domain](./docs/22-flooring-supplier-pricing-domain.md)
 - [Local development guide](./docs/local-development.md)
 - [Development credentials](./docs/development-access.md)
 
@@ -105,4 +108,21 @@ tests/
   - API CRUD for suppliers, contacts, supplier product links, and product-side supplier lookup
   - functional supplier list, create, edit, and detail pages in the web app
   - tenant-isolation coverage for supplier retrieval, creation, permissions, and cross-tenant product linking
+- Supplier Pricing Phase C now includes:
+  - tenant-owned supplier price lists, versions, price history, imports, and saved mappings
+  - server-side CSV/XLSX parsing with 5 MB guardrails, worksheet selection, and header-row support
+  - persisted import validation, approval, execution, rollback-safe saved-mapping application, and manual row matching
+  - import row persistence with pagination, search, sorting, match filters, execution filters, duplicate-only filtering, and warning-only filtering
+  - supplier pricing hub, price-list detail, import preview, import-detail workflows, and authorised product pricing visibility in the web app
+  - sequential and concurrent idempotency proof, raw-cost permission proof, tenant-isolation proof, and serial DB-backed API validation policy using the dedicated `tradesperson_erp_isolation_test` database for destructive test helpers and compiled isolation runs
+- Supplier Pricing Phase C closure was re-verified on Saturday, July 18, 2026 with:
+  - Prisma `format`, `validate`, `generate`, and migration status all passing
+  - clean migration proof on `tradesperson_phasec_clean_migration_test`
+  - Phase B to Phase C upgrade proof on `tradesperson_phaseb_to_phasec_upgrade_test`
+  - seed repeatability proof on `tradesperson_phasec_seed_validation_test`
+  - API test DB guard coverage `7/7`
+  - API unit tests `60/60`
+  - API DB tests `4/4`
+  - compiled isolation `41 passed, 0 failed`
+  - authoritative `pnpm --filter @tradesperson/api test:full` passing with clean teardown and released dynamic port
 - Final UI branding remains deferred. Current catalogue screens are intentionally functional and replaceable.

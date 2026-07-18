@@ -40,6 +40,18 @@
 - waste rules
 - installation rates
 
+### Phase 4 progress checkpoint
+
+- Phase A catalogue foundation is implemented
+- Phase B supplier foundation is implemented
+- Phase C supplier pricing is implemented and closure-verified on Saturday, July 18, 2026 with:
+  - supplier price lists, versions, supplier product pricing, and price history
+  - persisted CSV/XLSX supplier imports with 5 MB enforcement, worksheet selection, header-row selection, and BOM-safe parsing
+  - saved mappings, manual row matching, validation, approval, execution, rollback safety, and sequential/concurrent idempotency
+  - import row persistence with pagination, search, sorting, match filters, execution filters, duplicate-only filtering, and warning-only filtering
+  - pricing hub, price-list detail, import management, and authorised product pricing visibility
+- Phase D is the next phase and starts with purchase requisitions and purchase orders
+
 ## Phase 5 Quotes
 
 - quote builder

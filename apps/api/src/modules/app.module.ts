@@ -18,6 +18,7 @@ import { CrmModule } from "./crm.module";
 import { SurveysModule } from "./surveys.module";
 import { CatalogueModule } from "./catalogue.module";
 import { SuppliersModule } from "./suppliers.module";
+import { SupplierPricingModule } from "./supplier-pricing.module";
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { SuppliersModule } from "./suppliers.module";
     SurveysModule,
     CatalogueModule,
     SuppliersModule,
+    SupplierPricingModule,
   ],
   providers: [{ provide: "APP_URL", useValue: loadEnv().API_URL }],
 })

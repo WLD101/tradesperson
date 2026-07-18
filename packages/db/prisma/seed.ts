@@ -35,6 +35,32 @@ const permissions = [
     "Suppliers",
     "Create and update supplier product links",
   ],
+  ["supplier_pricing.view", "Suppliers", "View supplier pricing records"],
+  [
+    "supplier_pricing.manage",
+    "Suppliers",
+    "Create and update supplier pricing records",
+  ],
+  [
+    "supplier_pricing.approve",
+    "Suppliers",
+    "Approve and activate supplier pricing",
+  ],
+  [
+    "supplier_pricing.import",
+    "Suppliers",
+    "Run supplier pricing import workflows",
+  ],
+  [
+    "supplier_pricing.archive",
+    "Suppliers",
+    "Supersede and archive supplier pricing records",
+  ],
+  [
+    "supplier_pricing.history.view",
+    "Suppliers",
+    "View immutable supplier pricing history",
+  ],
   ["leads.view", "CRM", "View leads"],
   ["leads.manage", "CRM", "Create and update leads"],
   ["customers.view", "CRM", "View customers"],
@@ -66,6 +92,12 @@ const tenantRoles = {
     "suppliers.archive",
     "suppliers.contacts.manage",
     "suppliers.products.manage",
+    "supplier_pricing.view",
+    "supplier_pricing.manage",
+    "supplier_pricing.approve",
+    "supplier_pricing.import",
+    "supplier_pricing.archive",
+    "supplier_pricing.history.view",
     "leads.view",
     "leads.manage",
     "customers.view",
@@ -90,6 +122,12 @@ const tenantRoles = {
     "suppliers.archive",
     "suppliers.contacts.manage",
     "suppliers.products.manage",
+    "supplier_pricing.view",
+    "supplier_pricing.manage",
+    "supplier_pricing.approve",
+    "supplier_pricing.import",
+    "supplier_pricing.archive",
+    "supplier_pricing.history.view",
     "leads.view",
     "leads.manage",
     "customers.view",
@@ -1462,6 +1500,310 @@ async function main() {
       });
     }),
   );
+
+  const supplierProductRecords = await prisma.supplierProduct.findMany({
+    where: { tenantId: tenant.id },
+    include: {
+      supplier: true,
+      product: {
+        include: {
+          category: true,
+        },
+      },
+      supplierUnit: true,
+    },
+  });
+  const supplierProductBySku = new Map(
+    supplierProductRecords.map((item) => [item.supplierSku, item]),
+  );
+
+  await prisma.supplierProductPriceHistory.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.supplierProductPrice.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.supplierPriceListVersion.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.supplierPriceList.deleteMany({ where: { tenantId: tenant.id } });
+
+  const priceListDefinitions = [
+    {
+      supplierCode: "PFD-001",
+      name: "Pennine Spring 2026",
+      reference: "PFD-SPR-2026",
+      currency: "GBP",
+      status: "SUPERSEDED" as const,
+      sourceType: "NEGOTIATED" as const,
+      effectiveDate: new Date("2026-03-01T00:00:00.000Z"),
+      expiryDate: new Date("2026-05-31T23:59:59.000Z"),
+      notes: "Historical supplier price list retained for comparison.",
+      versions: [
+        {
+          versionNumber: 1,
+          status: "SUPERSEDED" as const,
+          effectiveDate: new Date("2026-03-01T00:00:00.000Z"),
+          expiryDate: new Date("2026-05-31T23:59:59.000Z"),
+          revisionReason: "Initial spring pricing",
+        },
+      ],
+    },
+    {
+      supplierCode: "PFD-001",
+      name: "Pennine Summer 2026",
+      reference: "PFD-SUM-2026",
+      currency: "GBP",
+      status: "ACTIVE" as const,
+      sourceType: "CSV_IMPORT" as const,
+      effectiveDate: new Date("2026-06-01T00:00:00.000Z"),
+      expiryDate: null,
+      notes: "Current active negotiated prices for major flooring lines.",
+      versions: [
+        {
+          versionNumber: 1,
+          status: "ACTIVE" as const,
+          effectiveDate: new Date("2026-06-01T00:00:00.000Z"),
+          expiryDate: null,
+          revisionReason: "Approved summer pricing activation",
+        },
+      ],
+    },
+    {
+      supplierCode: "NPA-002",
+      name: "NW Prep Draft July 2026",
+      reference: "NPA-DR-2026-07",
+      currency: "GBP",
+      status: "DRAFT" as const,
+      sourceType: "MANUAL" as const,
+      effectiveDate: new Date("2026-07-20T00:00:00.000Z"),
+      expiryDate: null,
+      notes: "Draft preparation-material updates awaiting review.",
+      versions: [
+        {
+          versionNumber: 1,
+          status: "DRAFT" as const,
+          effectiveDate: new Date("2026-07-20T00:00:00.000Z"),
+          expiryDate: null,
+          revisionReason: "Initial draft pricing",
+        },
+      ],
+    },
+  ] as const;
+
+  const versionByKey = new Map<string, Awaited<
+    ReturnType<typeof prisma.supplierPriceListVersion.create>
+  >>();
+
+  for (const definition of priceListDefinitions) {
+    const supplier = getRequiredMapValue(supplierByCode, definition.supplierCode, "supplier");
+    const priceList = await prisma.supplierPriceList.create({
+      data: {
+        tenantId: tenant.id,
+        supplierId: supplier.id,
+        name: definition.name,
+        reference: definition.reference,
+        currency: definition.currency,
+        status: definition.status,
+        sourceType: definition.sourceType,
+        effectiveDate: definition.effectiveDate,
+        expiryDate: definition.expiryDate,
+        notes: definition.notes,
+        createdById: owner.id,
+        updatedById: owner.id,
+        approvedById:
+          definition.status === "ACTIVE" || definition.status === "SUPERSEDED"
+            ? manager.id
+            : null,
+        approvedAt:
+          definition.status === "ACTIVE" || definition.status === "SUPERSEDED"
+            ? new Date("2026-06-01T08:00:00.000Z")
+            : null,
+      },
+    });
+
+    for (const versionDefinition of definition.versions) {
+      const version = await prisma.supplierPriceListVersion.create({
+        data: {
+          tenantId: tenant.id,
+          supplierId: supplier.id,
+          priceListId: priceList.id,
+          versionNumber: versionDefinition.versionNumber,
+          status: versionDefinition.status,
+          effectiveDate: versionDefinition.effectiveDate,
+          expiryDate: versionDefinition.expiryDate,
+          currency: definition.currency,
+          sourceType: definition.sourceType,
+          revisionReason: versionDefinition.revisionReason,
+          createdById: owner.id,
+          approvedById:
+            versionDefinition.status === "ACTIVE" ||
+            versionDefinition.status === "SUPERSEDED"
+              ? manager.id
+              : null,
+          approvedAt:
+            versionDefinition.status === "ACTIVE" ||
+            versionDefinition.status === "SUPERSEDED"
+              ? new Date("2026-06-01T08:00:00.000Z")
+              : null,
+          supersededAt:
+            versionDefinition.status === "SUPERSEDED"
+              ? new Date("2026-06-01T08:00:00.000Z")
+              : null,
+        },
+      });
+
+      versionByKey.set(`${definition.reference}:${version.versionNumber}`, version);
+    }
+  }
+
+  const priceDefinitions = [
+    {
+      supplierSku: "PFD-CARP-4M-001",
+      versionKey: "PFD-SPR-2026:1",
+      priceBasis: "SQUARE_METRE" as const,
+      baseCost: "14.9500",
+      areaCost: "14.9500",
+      effectiveDate: new Date("2026-03-01T00:00:00.000Z"),
+      expiryDate: new Date("2026-05-31T23:59:59.000Z"),
+    },
+    {
+      supplierSku: "PFD-CARP-4M-001",
+      versionKey: "PFD-SUM-2026:1",
+      priceBasis: "SQUARE_METRE" as const,
+      baseCost: "16.2500",
+      areaCost: "16.2500",
+      effectiveDate: new Date("2026-06-01T00:00:00.000Z"),
+      expiryDate: null,
+    },
+    {
+      supplierSku: "PFD-CARP-4M-001",
+      versionKey: "PFD-SUM-2026:1",
+      priceBasis: "ROLL" as const,
+      baseCost: "1895.0000",
+      rollCost: "1895.0000",
+      effectiveDate: new Date("2026-06-01T00:00:00.000Z"),
+      expiryDate: null,
+    },
+    {
+      supplierSku: "PFD-LVT-212",
+      versionKey: "PFD-SUM-2026:1",
+      priceBasis: "PACK" as const,
+      baseCost: "38.7500",
+      packCost: "38.7500",
+      promotionalCost: "36.5000",
+      promotionStart: new Date("2026-07-10T00:00:00.000Z"),
+      promotionEnd: new Date("2026-07-31T23:59:59.000Z"),
+      effectiveDate: new Date("2026-06-01T00:00:00.000Z"),
+      expiryDate: null,
+    },
+    {
+      supplierSku: "PFD-SV-2M-020",
+      versionKey: "PFD-SUM-2026:1",
+      priceBasis: "SQUARE_METRE" as const,
+      baseCost: "19.4000",
+      areaCost: "19.4000",
+      effectiveDate: new Date("2026-06-01T00:00:00.000Z"),
+      expiryDate: null,
+    },
+    {
+      supplierSku: "PFD-UND-11MM",
+      versionKey: "PFD-SUM-2026:1",
+      priceBasis: "ROLL" as const,
+      baseCost: "121.0000",
+      rollCost: "121.0000",
+      effectiveDate: new Date("2026-06-01T00:00:00.000Z"),
+      expiryDate: null,
+    },
+    {
+      supplierSku: "NPA-ADH-15KG",
+      versionKey: "NPA-DR-2026-07:1",
+      priceBasis: "TUB" as const,
+      baseCost: "42.5000",
+      effectiveDate: new Date("2026-07-20T00:00:00.000Z"),
+      expiryDate: null,
+    },
+    {
+      supplierSku: "NPA-SMO-20KG",
+      versionKey: "NPA-DR-2026-07:1",
+      priceBasis: "BAG" as const,
+      baseCost: "16.9500",
+      effectiveDate: new Date("2026-07-20T00:00:00.000Z"),
+      expiryDate: null,
+    },
+    {
+      supplierSku: "TEP-EDGE-09",
+      versionKey: "PFD-SUM-2026:1",
+      priceBasis: "EACH" as const,
+      baseCost: "8.9500",
+      effectiveDate: new Date("2026-06-01T00:00:00.000Z"),
+      expiryDate: null,
+    },
+  ] as const;
+
+  for (const definition of priceDefinitions) {
+    const supplierProduct = getRequiredMapValue(
+      supplierProductBySku,
+      definition.supplierSku,
+      "supplier product",
+    );
+    const version = getRequiredMapValue(versionByKey, definition.versionKey, "price version");
+    const price = await prisma.supplierProductPrice.create({
+      data: {
+        tenantId: tenant.id,
+        supplierId: supplierProduct.supplierId,
+        supplierProductId: supplierProduct.id,
+        priceListVersionId: version.id,
+        pricingUnitId: supplierProduct.supplierUnitId,
+        priceBasis: definition.priceBasis,
+        currency: "GBP",
+        baseCost: definition.baseCost,
+        packCost: "packCost" in definition ? definition.packCost ?? null : null,
+        rollCost: "rollCost" in definition ? definition.rollCost ?? null : null,
+        areaCost: "areaCost" in definition ? definition.areaCost ?? null : null,
+        minimumOrderQty: supplierProduct.minimumOrderQty ?? null,
+        promotionalCost:
+          "promotionalCost" in definition ? definition.promotionalCost ?? null : null,
+        promotionStart:
+          "promotionStart" in definition ? definition.promotionStart ?? null : null,
+        promotionEnd:
+          "promotionEnd" in definition ? definition.promotionEnd ?? null : null,
+        effectiveDate: definition.effectiveDate,
+        expiryDate: definition.expiryDate,
+        isActive: true,
+        createdById: owner.id,
+        updatedById: owner.id,
+      },
+    });
+
+    await prisma.supplierProductPriceHistory.create({
+      data: {
+        tenantId: tenant.id,
+        supplierId: supplierProduct.supplierId,
+        supplierProductId: supplierProduct.id,
+        supplierProductPriceId: price.id,
+        priceListVersionId: version.id,
+        currency: "GBP",
+        priceBasis: definition.priceBasis,
+        previousBaseCost:
+          definition.versionKey === "PFD-SUM-2026:1" &&
+          definition.supplierSku === "PFD-CARP-4M-001" &&
+          definition.priceBasis === "SQUARE_METRE"
+            ? "14.9500"
+            : null,
+        newBaseCost: definition.baseCost,
+        previousPromotionalCost: null,
+        newPromotionalCost:
+          "promotionalCost" in definition ? definition.promotionalCost ?? null : null,
+        effectiveDate: definition.effectiveDate,
+        approvalStatus: version.status,
+        changeReason:
+          definition.versionKey === "PFD-SPR-2026:1"
+            ? "Historical baseline pricing"
+            : definition.versionKey === "PFD-SUM-2026:1"
+              ? "Approved summer 2026 pricing update"
+              : "Draft supplier review",
+        sourceType:
+          definition.versionKey === "PFD-SUM-2026:1" ? "CSV_IMPORT" : "MANUAL",
+        sourceLabel: definition.versionKey.split(":")[0] ?? null,
+        actorUserId: owner.id,
+      },
+    });
+  }
 
   await prisma.productAttributeDefinition.upsert({
     where: { tenantId_key: { tenantId: tenant.id, key: "wear-layer" } },

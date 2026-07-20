@@ -59,6 +59,9 @@ export default async function SupplierPriceListDetailPage({
     activeVersion?.sourceImportId && permissions.canImportPricing
       ? await getSupplierPriceImport(id, activeVersion.sourceImportId)
       : null;
+  const linkedImports = priceList.imports ?? [];
+  const linkedImportCount = priceList._count?.imports ?? linkedImports.length;
+  const activeVersionPrices = activeVersion?.prices ?? [];
 
   return (
     <div className="space-y-6">
@@ -93,7 +96,7 @@ export default async function SupplierPriceListDetailPage({
             </p>
             <p className="text-sm text-slate-700">Source: {priceList.sourceType}</p>
             <p className="text-sm text-slate-700">
-              Imports linked: {priceList._count.imports}
+              Imports linked: {linkedImportCount}
             </p>
           </div>
           {priceList.notes ? (
@@ -109,6 +112,7 @@ export default async function SupplierPriceListDetailPage({
             {versions.length ? (
               versions.map((version) => {
                 const isActive = version.id === activeVersion?.id;
+                const versionPrices = version.prices ?? [];
                 return (
                   <Link
                     key={version.id}
@@ -129,7 +133,7 @@ export default async function SupplierPriceListDetailPage({
                         </p>
                       </div>
                       <p className={`text-xs ${isActive ? "text-slate-200" : "text-slate-500"}`}>
-                        {version.prices.length} rows
+                        {versionPrices.length} rows
                       </p>
                     </div>
                   </Link>
@@ -185,8 +189,8 @@ export default async function SupplierPriceListDetailPage({
         <Card>
           <h2 className="text-lg font-semibold text-slate-950">Linked imports</h2>
           <div className="mt-4 space-y-3">
-            {priceList.imports.length ? (
-              priceList.imports.map((item) => (
+            {linkedImports.length ? (
+              linkedImports.map((item) => (
                 <div key={item.id} className="rounded-xl border border-slate-200 px-4 py-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -226,7 +230,7 @@ export default async function SupplierPriceListDetailPage({
             </p>
           </div>
           <p className="text-sm text-slate-500">
-            {activeVersion?.prices.length ?? 0} rows
+            {activeVersionPrices.length} rows
           </p>
         </div>
 
@@ -244,8 +248,8 @@ export default async function SupplierPriceListDetailPage({
               </tr>
             </thead>
             <tbody>
-              {activeVersion?.prices.length ? (
-                activeVersion.prices.map((price) => (
+              {activeVersionPrices.length ? (
+                activeVersionPrices.map((price) => (
                   <tr key={price.id} className="border-b border-slate-100">
                     <td className="px-2 py-3 text-slate-900">{price.priceBasis}</td>
                     <td className="px-2 py-3 text-slate-900">{price.currency}</td>

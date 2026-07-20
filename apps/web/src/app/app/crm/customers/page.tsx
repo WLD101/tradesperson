@@ -48,6 +48,9 @@ export default async function CustomersPage() {
         </div>
         <div className="mt-4 space-y-3">
           {customers.map((customer) => (
+            (() => {
+              const properties = customer.properties ?? [];
+              return (
             <div
               key={customer.id}
               className="rounded-xl border border-slate-200 px-4 py-4"
@@ -60,8 +63,8 @@ export default async function CustomersPage() {
                 • {customer.primaryPhone ?? "No phone"}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {customer.properties.length ? (
-                  customer.properties.map((property) => (
+                {properties.length ? (
+                  properties.map((property) => (
                     <span
                       key={property.id}
                       className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"
@@ -77,6 +80,8 @@ export default async function CustomersPage() {
                 )}
               </div>
             </div>
+              );
+            })()
           ))}
           {!customers.length ? (
             <p className="text-sm text-slate-500">No customers yet.</p>

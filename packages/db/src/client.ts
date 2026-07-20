@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client/index";
 
 declare global {
   var __tradespersonPrisma__: PrismaClient | undefined;

@@ -973,6 +973,91 @@ const tests: TestCase[] = [
       assert.equal(delComp.status, 400);
     }
   }
+,
+  {
+    name: "tenant A cannot create requisition using tenant B product",
+    run: async () => {
+      const response = await ownerAAgent.post("/api/v1/purchase-requisitions").send({
+        lines: [
+          {
+            productId: fixtures.productB.id,
+            description: "Test Line",
+            requestedQuantity: 10,
+            unit: "PACK",
+          }
+        ]
+      });
+      assert.equal(response.status, 404);
+    }
+  },
+  {
+    name: "tenant A cannot retrieve tenant B requisition",
+    run: async () => {
+      const reqB = await ownerBAgent.post("/api/v1/purchase-requisitions").send({
+        lines: [
+          {
+            productId: fixtures.productB.id,
+            description: "Test",
+            requestedQuantity: 1,
+            unit: "PACK",
+          }
+        ]
+      });
+      assert.equal(reqB.status, 201);
+      
+      const response = await ownerAAgent.get(`/api/v1/purchase-requisitions/${reqB.body.id}`);
+      assert.equal(response.status, 404);
+    }
+  },
+  {
+    name: "staff without procurement permissions cannot create requisition",
+    run: async () => {
+      const response = await staffAAgent.post("/api/v1/purchase-requisitions").send({
+        lines: [
+          {
+            productId: fixtures.productA.id,
+            description: "Test",
+            requestedQuantity: 1,
+            unit: "ROLL",
+          }
+        ]
+      });
+      assert.equal(response.status, 403);
+    }
+  },
+  {
+    name: "tenant A cannot create purchase order for tenant B supplier",
+    run: async () => {
+      const response = await ownerAAgent.post("/api/v1/purchase-orders").send({
+        supplierId: fixtures.supplierB.id,
+        lines: [
+          {
+            productId: fixtures.productA.id,
+            quantity: 1,
+          }
+        ]
+      });
+      assert.equal(response.status, 404);
+    }
+  },
+  {
+    name: "tenant A cannot retrieve tenant B purchase order",
+    run: async () => {
+      const poB = await ownerBAgent.post("/api/v1/purchase-orders").send({
+        supplierId: fixtures.supplierB.id,
+        lines: [
+          {
+            productId: fixtures.productB.id,
+            quantity: 1,
+          }
+        ]
+      });
+      assert.equal(poB.status, 201);
+      
+      const response = await ownerAAgent.get(`/api/v1/purchase-orders/${poB.body.id}`);
+      assert.equal(response.status, 404);
+    }
+  }
 ];
 
 const main = async () => {

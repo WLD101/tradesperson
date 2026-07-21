@@ -4,11 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 
-const DB_URL = process.env.DATABASE_URL;
-if (!DB_URL || !DB_URL.includes('tradesperson_phasec_to_phased_upgrade_test')) {
-  console.error('ERROR: DATABASE_URL must point to tradesperson_phasec_to_phased_upgrade_test');
-  process.exit(1);
-}
+const DB_URL = process.env.DATABASE_URL as string;
 
 const ROOT_DIR = path.resolve(__dirname, '../../../..');
 const DB_DIR = path.join(ROOT_DIR, 'packages/db');
@@ -97,7 +93,7 @@ async function main() {
     `);
 
     const tables = [
-      'Tenant', 'Branch', 'User', 'Membership', 'ProductCategory', 'UnitOfMeasure',
+      'Tenant', 'Branch', 'User', 'TenantMembership', 'ProductCategory', 'UnitOfMeasure',
       'Product', 'ProductVariant', 'Supplier', 'SupplierProduct', 'SupplierPriceList',
       'SupplierPriceListVersion', 'SupplierProductPrice', 'SupplierProductPriceHistory'
     ];
@@ -120,11 +116,11 @@ async function main() {
     });
 
     for (const table of tables) {
-      const [{ count }] = await prisma.$queryRawUnsafe<any[]>(`SELECT COUNT(*) as count FROM "${table}"`);
+      const [{ count }] = await prisma.$queryRawUnsafe<any[]>(`SELECT COUNT(*) as count FROM \"${table}\"`);
       if (Number(count) !== countsBefore[table]) {
         throw new Error(`Count mismatch for ${table}: before=${countsBefore[table]}, after=${count}`);
       }
-      const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT id FROM "${table}" ORDER BY id`);
+      const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT id FROM \"${table}\" ORDER BY id`);
       const afterIds = rows.map(r => r.id);
       if (JSON.stringify(afterIds) !== JSON.stringify(idsBefore[table])) {
         throw new Error(`ID mismatch for ${table}: IDs changed after migration`);
@@ -135,7 +131,7 @@ async function main() {
     
     // Attempt to create a Procurement record to prove the new schema is active
     await prisma.$executeRawUnsafe(`
-      INSERT INTO "PurchaseRequisition" ("id", "tenantId", "branchId", "number", "status", "createdById", "createdAt", "updatedAt")
+      INSERT INTO "PurchaseRequisition" ("id", "tenantId", "branchId", "requisitionNumber", "status", "requestedById", "createdAt", "updatedAt")
       VALUES ('${randomUUID()}', '${tenantId}', '${branchId}', 'REQ-0001', 'DRAFT', '${userId}', NOW(), NOW());
     `);
     

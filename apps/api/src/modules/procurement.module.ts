@@ -125,28 +125,28 @@ class ProcurementController {
 
   @Get("purchase-requisitions")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.requisition.view")
+  @RequirePermissions("procurement:requisition:read")
   listRequisitions(@Query() query: unknown, @CurrentSession() session: TenantSession) {
     return this.procurement.listRequisitions(session, listQuerySchema.parse(query));
   }
 
   @Post("purchase-requisitions")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.requisition.create")
+  @RequirePermissions("procurement:requisition:create")
   createRequisition(@Body() body: unknown, @CurrentSession() session: TenantSession) {
     return this.procurement.createRequisition(session, createRequisitionSchema.parse(body));
   }
 
   @Get("purchase-requisitions/:id")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.requisition.view")
+  @RequirePermissions("procurement:requisition:read")
   getRequisition(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.getRequisition(session, id);
   }
 
   @Patch("purchase-requisitions/:id")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.requisition.manage")
+  @RequirePermissions("procurement:requisition:write")
   updateRequisition(
     @Param("id") id: string,
     @Body() body: unknown,
@@ -157,35 +157,35 @@ class ProcurementController {
 
   @Post("purchase-requisitions/:id/submit")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.requisition.submit")
+  @RequirePermissions("procurement:requisition:submit")
   submitRequisition(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.submitRequisition(session, id);
   }
 
   @Post("purchase-requisitions/:id/approve")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.requisition.approve")
+  @RequirePermissions("procurement:requisition:approve")
   approveRequisition(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.approveRequisition(session, id);
   }
 
   @Post("purchase-requisitions/:id/reject")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.requisition.approve")
+  @RequirePermissions("procurement:requisition:approve")
   rejectRequisition(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.rejectRequisition(session, id);
   }
 
   @Post("purchase-requisitions/:id/cancel")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.requisition.manage")
+  @RequirePermissions("procurement:requisition:write")
   cancelRequisition(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.cancelRequisition(session, id);
   }
 
   @Post("purchase-requisitions/:id/create-purchase-order")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.create")
+  @RequirePermissions("procurement:order:create")
   createPurchaseOrderFromRequisition(
     @Param("id") id: string,
     @Body() body: unknown,
@@ -200,14 +200,14 @@ class ProcurementController {
 
   @Get("purchase-orders")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.view")
+  @RequirePermissions("procurement:order:read")
   listPurchaseOrders(@Query() query: unknown, @CurrentSession() session: TenantSession) {
     return this.procurement.listPurchaseOrders(session, listQuerySchema.parse(query));
   }
 
   @Post("purchase-orders")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.create")
+  @RequirePermissions("procurement:order:create")
   createPurchaseOrder(@Body() body: unknown, @CurrentSession() session: TenantSession) {
     return this.procurement.createPurchaseOrder(
       session,
@@ -217,14 +217,14 @@ class ProcurementController {
 
   @Get("purchase-orders/:id")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.view")
+  @RequirePermissions("procurement:order:read")
   getPurchaseOrder(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.getPurchaseOrder(session, id);
   }
 
   @Patch("purchase-orders/:id")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.manage")
+  @RequirePermissions("procurement:order:write")
   updatePurchaseOrder(
     @Param("id") id: string,
     @Body() body: unknown,
@@ -239,49 +239,49 @@ class ProcurementController {
 
   @Post("purchase-orders/:id/submit")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.submit")
+  @RequirePermissions("procurement:order:submit")
   submitPurchaseOrder(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.submitPurchaseOrder(session, id);
   }
 
   @Post("purchase-orders/:id/approve")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.approve")
+  @RequirePermissions("procurement:order:approve")
   approvePurchaseOrder(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.approvePurchaseOrder(session, id);
   }
 
   @Post("purchase-orders/:id/reject")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.approve")
+  @RequirePermissions("procurement:order:approve")
   rejectPurchaseOrder(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.rejectPurchaseOrder(session, id);
   }
 
   @Post("purchase-orders/:id/issue")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.issue")
+  @RequirePermissions("procurement:order:issue")
   issuePurchaseOrder(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.issuePurchaseOrder(session, id);
   }
 
   @Post("purchase-orders/:id/cancel")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.cancel")
+  @RequirePermissions("procurement:order:cancel")
   cancelPurchaseOrder(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.cancelPurchaseOrder(session, id);
   }
 
   @Post("purchase-orders/:id/new-version")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.manage")
+  @RequirePermissions("procurement:order:write")
   createNewVersion(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.createNewVersion(session, id);
   }
 
   @Post("purchase-orders/:id/acknowledgements")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.acknowledgement.manage")
+  @RequirePermissions("procurement:acknowledgement:write")
   createAcknowledgement(
     @Param("id") id: string,
     @Body() body: unknown,
@@ -296,7 +296,7 @@ class ProcurementController {
 
   @Patch("purchase-orders/:id/acknowledgements/:acknowledgementId")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.acknowledgement.manage")
+  @RequirePermissions("procurement:acknowledgement:write")
   updateAcknowledgement(
     @Param("id") id: string,
     @Param("acknowledgementId") acknowledgementId: string,
@@ -313,14 +313,14 @@ class ProcurementController {
 
   @Get("purchase-orders/:id/delivery-plans")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.order.view")
+  @RequirePermissions("procurement:order:read")
   listDeliveryPlans(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.procurement.listDeliveryPlans(session, id);
   }
 
   @Post("purchase-orders/:id/delivery-plans")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.delivery-plan.manage")
+  @RequirePermissions("procurement:delivery-plan:write")
   createDeliveryPlan(
     @Param("id") id: string,
     @Body() body: unknown,
@@ -331,7 +331,7 @@ class ProcurementController {
 
   @Patch("purchase-orders/:id/delivery-plans/:deliveryPlanId")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("procurement.delivery-plan.manage")
+  @RequirePermissions("procurement:delivery-plan:write")
   updateDeliveryPlan(
     @Param("id") id: string,
     @Param("deliveryPlanId") deliveryPlanId: string,

@@ -20,6 +20,14 @@ import { BranchAccessService } from "./branch-access.service";
 import { PrismaService } from "./prisma.service";
 import { TenantAccessService } from "./tenant-access.service";
 import { selectCurrentPrice } from "./supplier-pricing-rules";
+import {
+  assertPurchaseOrderTransition,
+  assertPurchaseOrderVersionTransition,
+  assertRequisitionMutable,
+  assertRequisitionTransition,
+  calculateOrderLine,
+  summarizeOrder,
+} from "./procurement-rules";
 
 type RequisitionLineInput = {
   productId: string;
@@ -323,7 +331,7 @@ export class ProcurementService {
   ) {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const existing = await this.ensureRequisition(session, requisitionId);
-    this.assertRequisitionMutable(existing.status);
+    assertRequisitionMutable(existing.status);
 
     if (input.lines) {
       await this.validateRequisitionLines(this.prisma.client, tenantId, input.lines);
@@ -560,7 +568,7 @@ export class ProcurementService {
       );
 
       const purchaseOrderNumber = await this.allocateNumber(tx, tenantId, "purchase-order");
-      const totals = this.summarizeOrder(lineDraft, input.deliveryAmount ?? 0);
+      const totals = summarizeOrder(lineDraft, this.money(input.deliveryAmount ?? 0));
 
       const createdOrder = await tx.purchaseOrder.create({
         data: {
@@ -584,7 +592,7 @@ export class ProcurementService {
         },
       });
 
-      const version = await tx.purchaseOrderVersion.create({
+      await tx.purchaseOrderVersion.create({
         data: {
           tenantId,
           purchaseOrderId: createdOrder.id,
@@ -709,9 +717,9 @@ export class ProcurementService {
             overrideAt: line.overrideAt,
           }));
 
-      const totals = this.summarizeOrder(
+      const totals = summarizeOrder(
         lineDraft,
-        input.deliveryAmount ?? Number(existing.deliveryAmount),
+        this.money(input.deliveryAmount ?? Number(existing.deliveryAmount)),
       );
 
       if (input.lines) {
@@ -891,7 +899,7 @@ export class ProcurementService {
       const nextVersionNumber =
         Math.max(...existing.versions.map((version: any) => version.versionNumber)) + 1;
 
-      const version = await tx.purchaseOrderVersion.create({
+      await tx.purchaseOrderVersion.create({
         data: {
           tenantId: existing.tenantId,
           purchaseOrderId: existing.id,
@@ -1139,7 +1147,7 @@ export class ProcurementService {
     action: string,
   ) {
     const requisition = await this.ensureRequisition(session, requisitionId);
-    this.assertRequisitionTransition(requisition.status, nextStatus);
+    assertRequisitionTransition(requisition.status, nextStatus);
 
     const updated = await this.prisma.client.purchaseRequisition.update({
       where: { id: requisition.id },
@@ -1184,8 +1192,8 @@ export class ProcurementService {
       throw new BadRequestException("Purchase order is missing a current version.");
     }
 
-    this.assertPurchaseOrderTransition(order.status, nextStatus);
-    this.assertPurchaseOrderVersionTransition(order.versions[0].status, nextVersionStatus);
+    assertPurchaseOrderTransition(order.status, nextStatus);
+    assertPurchaseOrderVersionTransition(order.versions[0].status, nextVersionStatus);
 
     const updated = await this.prisma.client.$transaction(async (tx) => {
       await tx.purchaseOrderVersion.update({
@@ -1314,10 +1322,8 @@ export class ProcurementService {
             ? this.money(line.unitCost)
             : new Prisma.Decimal(0);
       const quantity = this.money(line.quantity);
-      const lineSubtotal = quantity.mul(resolvedUnitCost);
       const taxRate = line.taxRate != null ? this.decimal(line.taxRate) : new Prisma.Decimal(0);
-      const taxAmount = lineSubtotal.mul(taxRate);
-      const lineTotal = lineSubtotal.plus(taxAmount);
+      const { lineSubtotal, taxAmount, lineTotal } = calculateOrderLine(quantity, resolvedUnitCost, taxRate);
 
       results.push({
         purchaseRequisitionLineId: line.purchaseRequisitionLineId ?? null,
@@ -1384,27 +1390,6 @@ export class ProcurementService {
       overrideActorUserId: string | null;
       overrideAt: Date | null;
     }>;
-  }
-
-  private summarizeOrder(
-    lines: Array<{ lineSubtotal: Prisma.Decimal; taxAmount: Prisma.Decimal; lineTotal: Prisma.Decimal }>,
-    deliveryAmount: number,
-  ) {
-    const subtotal = lines.reduce(
-      (sum, line) => sum.plus(line.lineSubtotal),
-      new Prisma.Decimal(0),
-    );
-    const taxAmount = lines.reduce(
-      (sum, line) => sum.plus(line.taxAmount),
-      new Prisma.Decimal(0),
-    );
-    const delivery = this.money(deliveryAmount);
-    return {
-      subtotal,
-      taxAmount,
-      deliveryAmount: delivery,
-      total: subtotal.plus(taxAmount).plus(delivery),
-    };
   }
 
   private async applyRequisitionAllocation(
@@ -1628,84 +1613,6 @@ export class ProcurementService {
         },
         data: { status: PurchaseOrderStatus.ACKNOWLEDGED },
       });
-    }
-  }
-
-  private assertRequisitionMutable(status: PurchaseRequisitionStatus) {
-    if (status !== PurchaseRequisitionStatus.DRAFT) {
-      throw new BadRequestException("Only draft requisitions can be edited.");
-    }
-  }
-
-  private assertRequisitionTransition(
-    current: PurchaseRequisitionStatus,
-    next: PurchaseRequisitionStatus,
-  ) {
-    const transitions: Record<PurchaseRequisitionStatus, PurchaseRequisitionStatus[]> = {
-      DRAFT: [PurchaseRequisitionStatus.SUBMITTED, PurchaseRequisitionStatus.CANCELLED],
-      SUBMITTED: [
-        PurchaseRequisitionStatus.APPROVED,
-        PurchaseRequisitionStatus.REJECTED,
-        PurchaseRequisitionStatus.CANCELLED,
-      ],
-      APPROVED: [PurchaseRequisitionStatus.PARTIALLY_ORDERED, PurchaseRequisitionStatus.ORDERED],
-      REJECTED: [],
-      PARTIALLY_ORDERED: [PurchaseRequisitionStatus.ORDERED],
-      ORDERED: [],
-      CANCELLED: [],
-    };
-    if (!transitions[current].includes(next)) {
-      throw new BadRequestException(`Cannot transition requisition from ${current} to ${next}.`);
-    }
-  }
-
-  private assertPurchaseOrderTransition(
-    current: PurchaseOrderStatus,
-    next: PurchaseOrderStatus,
-  ) {
-    const transitions: Record<PurchaseOrderStatus, PurchaseOrderStatus[]> = {
-      DRAFT: [PurchaseOrderStatus.PENDING_APPROVAL, PurchaseOrderStatus.CANCELLED],
-      PENDING_APPROVAL: [
-        PurchaseOrderStatus.APPROVED,
-        PurchaseOrderStatus.REJECTED,
-        PurchaseOrderStatus.CANCELLED,
-      ],
-      APPROVED: [PurchaseOrderStatus.ISSUED, PurchaseOrderStatus.CANCELLED],
-      ISSUED: [PurchaseOrderStatus.ACKNOWLEDGED, PurchaseOrderStatus.CANCELLED],
-      ACKNOWLEDGED: [PurchaseOrderStatus.CANCELLED],
-      PARTIALLY_FULFILLED: [],
-      FULFILLED: [],
-      CANCELLED: [],
-      REJECTED: [],
-    };
-    if (!transitions[current].includes(next)) {
-      throw new BadRequestException(`Cannot transition purchase order from ${current} to ${next}.`);
-    }
-  }
-
-  private assertPurchaseOrderVersionTransition(
-    current: PurchaseOrderVersionStatus,
-    next: PurchaseOrderVersionStatus,
-  ) {
-    const transitions: Record<
-      PurchaseOrderVersionStatus,
-      PurchaseOrderVersionStatus[]
-    > = {
-      DRAFT: [PurchaseOrderVersionStatus.PENDING_APPROVAL, PurchaseOrderVersionStatus.CANCELLED],
-      PENDING_APPROVAL: [
-        PurchaseOrderVersionStatus.APPROVED,
-        PurchaseOrderVersionStatus.REJECTED,
-        PurchaseOrderVersionStatus.CANCELLED,
-      ],
-      APPROVED: [PurchaseOrderVersionStatus.ISSUED],
-      ISSUED: [],
-      REJECTED: [],
-      CANCELLED: [],
-    };
-    if (!transitions[current].includes(next)) {
-      throw new BadRequestException(
-        `Cannot transition purchase-order version from ${current} to ${next}.`,
-      );
     }
   }
 

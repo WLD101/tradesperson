@@ -375,7 +375,7 @@ async function main() {
   const staffPassword = await hashPassword("Password123!");
 
   const owner = await prisma.user.upsert({
-    where: { email: "owner@exampleflooring:local" },
+    where: { email: "owner@exampleflooring.local" },
     update: {
       firstName: "Olivia",
       lastName: "Owner",
@@ -383,7 +383,7 @@ async function main() {
       status: "ACTIVE",
     },
     create: {
-      email: "owner@exampleflooring:local",
+      email: "owner@exampleflooring.local",
       firstName: "Olivia",
       lastName: "Owner",
       passwordHash: ownerPassword,
@@ -391,7 +391,7 @@ async function main() {
   });
 
   const manager = await prisma.user.upsert({
-    where: { email: "manager@exampleflooring:local" },
+    where: { email: "manager@exampleflooring.local" },
     update: {
       firstName: "Marcus",
       lastName: "Manager",
@@ -399,7 +399,7 @@ async function main() {
       status: "ACTIVE",
     },
     create: {
-      email: "manager@exampleflooring:local",
+      email: "manager@exampleflooring.local",
       firstName: "Marcus",
       lastName: "Manager",
       passwordHash: managerPassword,
@@ -407,7 +407,7 @@ async function main() {
   });
 
   const staff = await prisma.user.upsert({
-    where: { email: "staff@exampleflooring:local" },
+    where: { email: "staff@exampleflooring.local" },
     update: {
       firstName: "Sofia",
       lastName: "Staff",
@@ -415,7 +415,7 @@ async function main() {
       status: "ACTIVE",
     },
     create: {
-      email: "staff@exampleflooring:local",
+      email: "staff@exampleflooring.local",
       firstName: "Sofia",
       lastName: "Staff",
       passwordHash: staffPassword,
@@ -428,7 +428,7 @@ async function main() {
       name: "Example Flooring Ltd",
       legalName: "Example Flooring Ltd",
       tradingName: "Example Flooring",
-      businessEmail: "hello@exampleflooring:local",
+      businessEmail: "hello@exampleflooring.local",
       businessPhone: "+44 161 555 0100",
       city: "Manchester",
       postcode: "M1 1AA",
@@ -438,7 +438,7 @@ async function main() {
       slug: "example-flooring",
       legalName: "Example Flooring Ltd",
       tradingName: "Example Flooring",
-      businessEmail: "hello@exampleflooring:local",
+      businessEmail: "hello@exampleflooring.local",
       businessPhone: "+44 161 555 0100",
       city: "Manchester",
       postcode: "M1 1AA",
@@ -593,13 +593,13 @@ async function main() {
     where: { tokenHash: hashToken("demo-pending-invitation") },
     update: {
       tenantId: tenant.id,
-      email: "invitee@exampleflooring:local",
+      email: "invitee@exampleflooring.local",
       createdById: owner.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
     create: {
       tenantId: tenant.id,
-      email: "invitee@exampleflooring:local",
+      email: "invitee@exampleflooring.local",
       firstName: "Ivy",
       lastName: "Invitee",
       roleKey: "STAFF",
@@ -616,7 +616,7 @@ async function main() {
       branchId: headOffice.id,
       customerType: "RESIDENTIAL",
       displayName: "Amelia Johnson",
-      primaryEmail: "amelia.johnson@exampleflooring:local",
+      primaryEmail: "amelia.johnson@exampleflooring.local",
       primaryPhone: "+44 7700 900100",
       notes: "Returning customer with hallway and lounge refit planned.",
     },
@@ -626,7 +626,7 @@ async function main() {
       branchId: headOffice.id,
       customerType: "RESIDENTIAL",
       displayName: "Amelia Johnson",
-      primaryEmail: "amelia.johnson@exampleflooring:local",
+      primaryEmail: "amelia.johnson@exampleflooring.local",
       primaryPhone: "+44 7700 900100",
       notes: "Returning customer with hallway and lounge refit planned.",
     },
@@ -669,7 +669,7 @@ async function main() {
       status: "QUALIFIED",
       firstName: "Daniel",
       lastName: "Carter",
-      email: "daniel.carter@exampleflooring:local",
+      email: "daniel.carter@exampleflooring.local",
       phone: "+44 7700 900200",
       source: "Website enquiry",
       notes: "Interested in luxury vinyl tile for kitchen and dining room.",
@@ -685,7 +685,7 @@ async function main() {
       status: "QUALIFIED",
       firstName: "Daniel",
       lastName: "Carter",
-      email: "daniel.carter@exampleflooring:local",
+      email: "daniel.carter@exampleflooring.local",
       phone: "+44 7700 900200",
       source: "Website enquiry",
       notes: "Interested in luxury vinyl tile for kitchen and dining room.",
@@ -705,7 +705,7 @@ async function main() {
       firstName: "Nina",
       lastName: "Patel",
       companyName: "Patel Lettings",
-      email: "nina.patel@exampleflooring:local",
+      email: "nina.patel@exampleflooring.local",
       phone: "+44 7700 900300",
       source: "Referral",
       notes: "Needs quote for stair runner replacement in rental property.",
@@ -722,7 +722,7 @@ async function main() {
       firstName: "Nina",
       lastName: "Patel",
       companyName: "Patel Lettings",
-      email: "nina.patel@exampleflooring:local",
+      email: "nina.patel@exampleflooring.local",
       phone: "+44 7700 900300",
       source: "Referral",
       notes: "Needs quote for stair runner replacement in rental property.",

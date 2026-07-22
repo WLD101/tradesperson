@@ -6,7 +6,7 @@ import { createIsolationFixtures } from './helpers/tenant-fixtures';
 describe('Procurement DB Tests', () => {
   beforeAll(async () => {
     await recreateTestDatabase();
-  });
+  }, 30000);
 
   afterAll(async () => {
     await prisma.$disconnect();

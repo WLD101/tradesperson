@@ -73,7 +73,7 @@ const permissions = [
   ["sites:manage", "CRM", "Create and update sites"],
 ] as const;
 
-const rolePermissions = {
+export const rolePermissions = {
   BUSINESS_OWNER: permissions.map(([key]) => key),
   BRANCH_MANAGER: [
     "branches:view",
@@ -252,7 +252,7 @@ const assignRolePermissions = async (
   }
 };
 
-const createUser = async (input: {
+export const createUser = async (input: {
   email: string;
   firstName: string;
   lastName: string;
@@ -264,7 +264,7 @@ const createUser = async (input: {
     },
   });
 
-const attachMembershipRole = async (
+export const attachMembershipRole = async (
   membershipId: string,
   role: Role,
 ) => {
@@ -359,7 +359,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         slug: "tenant-a-flooring",
         legalName: "Tenant A Flooring Ltd",
         tradingName: "Tenant A Flooring",
-        businessEmail: "a@example:test",
+        businessEmail: "a@example.test",
       },
     }),
     prisma.tenant.create({
@@ -368,7 +368,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         slug: "tenant-b-flooring",
         legalName: "Tenant B Flooring Ltd",
         tradingName: "Tenant B Flooring",
-        businessEmail: "b@example:test",
+        businessEmail: "b@example.test",
       },
     }),
   ]);
@@ -420,22 +420,22 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
 
   const [ownerAUser, ownerBUser, branchUser, staffUser] = await Promise.all([
     createUser({
-      email: "owner-a@example:test",
+      email: "owner-a@example.test",
       firstName: "Olivia",
       lastName: "OwnerA",
     }),
     createUser({
-      email: "owner-b@example:test",
+      email: "owner-b@example.test",
       firstName: "Ben",
       lastName: "OwnerB",
     }),
     createUser({
-      email: "branch-a1@example:test",
+      email: "branch-a1@example.test",
       firstName: "Brenda",
       lastName: "Branch",
     }),
     createUser({
-      email: "staff-a@example:test",
+      email: "staff-a@example.test",
       firstName: "Sophie",
       lastName: "Staff",
     }),
@@ -491,7 +491,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         tenantId: tenantA.id,
         branchId: branchA1.id,
         displayName: "Customer A1",
-        primaryEmail: "customer-a1@example:test",
+        primaryEmail: "customer-a1@example.test",
       },
     }),
     prisma.customer.create({
@@ -499,7 +499,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         tenantId: tenantA.id,
         branchId: branchA2.id,
         displayName: "Customer A2",
-        primaryEmail: "customer-a2@example:test",
+        primaryEmail: "customer-a2@example.test",
       },
     }),
     prisma.customer.create({
@@ -507,7 +507,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         tenantId: tenantB.id,
         branchId: branchB1.id,
         displayName: "Customer B1",
-        primaryEmail: "customer-b1@example:test",
+        primaryEmail: "customer-b1@example.test",
       },
     }),
   ]);
@@ -549,7 +549,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         branchId: branchA1.id,
         firstName: "Lead",
         lastName: "A1",
-        email: "lead-a1@example:test",
+        email: "lead-a1@example.test",
         status: "QUALIFIED",
       },
     }),
@@ -559,7 +559,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         branchId: branchA2.id,
         firstName: "Lead",
         lastName: "A2",
-        email: "lead-a2@example:test",
+        email: "lead-a2@example.test",
         status: "NEW",
       },
     }),
@@ -569,7 +569,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         branchId: branchB1.id,
         firstName: "Lead",
         lastName: "B1",
-        email: "lead-b1@example:test",
+        email: "lead-b1@example.test",
         status: "NEW",
       },
     }),
@@ -661,7 +661,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         legalName: "Supplier A Ltd",
         tradingName: "Supplier A",
         supplierCode: "SUP-A-001",
-        email: "supplier-a@example:test",
+        email: "supplier-a@example.test",
         telephone: "01611234567",
         countryCode: "GB",
         defaultCurrency: "GBP",
@@ -674,7 +674,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         legalName: "Supplier B Ltd",
         tradingName: "Supplier B",
         supplierCode: "SUP-B-001",
-        email: "supplier-b@example:test",
+        email: "supplier-b@example.test",
         telephone: "01219876543",
         countryCode: "GB",
         defaultCurrency: "GBP",
@@ -689,7 +689,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         supplierId: supplierA.id,
         branchId: branchA1.id,
         name: "Alice Buyer",
-        email: "alice.buyer@example:test",
+        email: "alice.buyer@example.test",
         isPrimary: true,
       },
     }),
@@ -699,7 +699,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         supplierId: supplierB.id,
         branchId: branchB1.id,
         name: "Bob Vendor",
-        email: "bob.vendor@example:test",
+        email: "bob.vendor@example.test",
         isPrimary: true,
       },
     }),
@@ -734,7 +734,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
     prisma.invitation.create({
       data: {
         tenantId: tenantA.id,
-        email: "invite-a@example:test",
+        email: "invite-a@example.test",
         roleKey: "STAFF",
         tokenHash: "token-a",
         expiresAt: new Date("2030-01-01T00:00:00.000Z"),
@@ -744,7 +744,7 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
     prisma.invitation.create({
       data: {
         tenantId: tenantB.id,
-        email: "invite-b@example:test",
+        email: "invite-b@example.test",
         roleKey: "STAFF",
         tokenHash: "token-b",
         expiresAt: new Date("2030-01-01T00:00:00.000Z"),
@@ -832,3 +832,6 @@ export const signInThroughApi = async (
     activeBranchId: string | null;
   };
 };
+
+
+

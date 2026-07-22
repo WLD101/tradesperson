@@ -311,7 +311,7 @@ export class ProcurementService {
     await this.audit.record({
       tenantId,
       actorUserId: session.user.id,
-      action: "procurement.requisition.create",
+      action: "procurement:requisition:create",
       entityType: "purchaseRequisition",
       entityId: requisition.id,
       newValues: {
@@ -387,7 +387,7 @@ export class ProcurementService {
     await this.audit.record({
       tenantId,
       actorUserId: session.user.id,
-      action: "procurement.requisition.update",
+      action: "procurement:requisition:update",
       entityType: "purchaseRequisition",
       entityId: existing.id,
       previousValues: {
@@ -411,7 +411,7 @@ export class ProcurementService {
       session,
       requisitionId,
       PurchaseRequisitionStatus.SUBMITTED,
-      "procurement.requisition.submit",
+      "procurement:requisition:submit",
     );
   }
 
@@ -420,7 +420,7 @@ export class ProcurementService {
       session,
       requisitionId,
       PurchaseRequisitionStatus.APPROVED,
-      "procurement.requisition.approve",
+      "procurement:requisition:approve",
     );
   }
 
@@ -429,7 +429,7 @@ export class ProcurementService {
       session,
       requisitionId,
       PurchaseRequisitionStatus.REJECTED,
-      "procurement.requisition.reject",
+      "procurement:requisition:reject",
     );
   }
 
@@ -438,7 +438,7 @@ export class ProcurementService {
       session,
       requisitionId,
       PurchaseRequisitionStatus.CANCELLED,
-      "procurement.requisition.cancel",
+      "procurement:requisition:cancel",
     );
   }
 
@@ -466,7 +466,7 @@ export class ProcurementService {
     await this.audit.record({
       tenantId: requisition.tenantId,
       actorUserId: session.user.id,
-      action: "procurement.requisition.convert",
+      action: "procurement:requisition:convert",
       entityType: "purchaseRequisition",
       entityId: requisition.id,
       newValues: { purchaseOrderId: (created as { id: string }).id },
@@ -536,6 +536,23 @@ export class ProcurementService {
       include: PURCHASE_ORDER_SELECT,
     });
     return this.sanitizeProcurementPayload(purchaseOrder, session);
+  }
+
+  async getPurchaseOrderPrint(session: TenantSession, purchaseOrderId: string) {
+    const purchaseOrder = await this.ensurePurchaseOrder(session, purchaseOrderId, {
+      include: PURCHASE_ORDER_SELECT,
+    });
+    const sanitized = this.sanitizeProcurementPayload(purchaseOrder, session);
+    delete (sanitized as any).internalNotes;
+    for (const version of sanitized.versions ?? []) {
+      for (const line of version.lines ?? []) {
+        delete (line as any).overrideReason;
+        delete (line as any).overrideActorUserId;
+        delete (line as any).overrideAt;
+        delete (line as any).priceSnapshot;
+      }
+    }
+    return sanitized;
   }
 
   async createPurchaseOrder(session: TenantSession, input: CreatePurchaseOrderInput) {
@@ -655,7 +672,7 @@ export class ProcurementService {
     await this.audit.record({
       tenantId,
       actorUserId: session.user.id,
-      action: "procurement.order.create",
+      action: "procurement:order:create",
       entityType: "purchaseOrder",
       entityId: order.id,
       newValues: {
@@ -811,7 +828,7 @@ export class ProcurementService {
     await this.audit.record({
       tenantId: existing.tenantId,
       actorUserId: session.user.id,
-      action: "procurement.order.update",
+      action: "procurement:order:update",
       entityType: "purchaseOrder",
       entityId: existing.id,
       previousValues: {
@@ -833,7 +850,7 @@ export class ProcurementService {
       purchaseOrderId,
       PurchaseOrderStatus.PENDING_APPROVAL,
       PurchaseOrderVersionStatus.PENDING_APPROVAL,
-      "procurement.order.submit",
+      "procurement:order:submit",
     );
   }
 
@@ -843,7 +860,7 @@ export class ProcurementService {
       purchaseOrderId,
       PurchaseOrderStatus.APPROVED,
       PurchaseOrderVersionStatus.APPROVED,
-      "procurement.order.approve",
+      "procurement:order:approve",
     );
   }
 
@@ -853,7 +870,7 @@ export class ProcurementService {
       purchaseOrderId,
       PurchaseOrderStatus.REJECTED,
       PurchaseOrderVersionStatus.REJECTED,
-      "procurement.order.reject",
+      "procurement:order:reject",
     );
   }
 
@@ -863,7 +880,7 @@ export class ProcurementService {
       purchaseOrderId,
       PurchaseOrderStatus.ISSUED,
       PurchaseOrderVersionStatus.ISSUED,
-      "procurement.order.issue",
+      "procurement:order:issue",
     );
   }
 
@@ -873,7 +890,7 @@ export class ProcurementService {
       purchaseOrderId,
       PurchaseOrderStatus.CANCELLED,
       PurchaseOrderVersionStatus.CANCELLED,
-      "procurement.order.cancel",
+      "procurement:order:cancel",
     );
   }
 
@@ -967,7 +984,7 @@ export class ProcurementService {
     await this.audit.record({
       tenantId: existing.tenantId,
       actorUserId: session.user.id,
-      action: "procurement.order.version.create",
+      action: "procurement:order:version:create",
       entityType: "purchaseOrder",
       entityId: existing.id,
       newValues: { newVersionId: updated.versions?.[0]?.id },
@@ -1000,7 +1017,7 @@ export class ProcurementService {
     await this.audit.record({
       tenantId: order.tenantId,
       actorUserId: session.user.id,
-      action: "procurement.acknowledgement.create",
+      action: "procurement:acknowledgement:create",
       entityType: "purchaseOrder",
       entityId: order.id,
       newValues: created,
@@ -1045,7 +1062,7 @@ export class ProcurementService {
     await this.audit.record({
       tenantId: order.tenantId,
       actorUserId: session.user.id,
-      action: "procurement.acknowledgement.update",
+      action: "procurement:acknowledgement:update",
       entityType: "purchaseOrder",
       entityId: order.id,
       previousValues: existing,
@@ -1086,7 +1103,7 @@ export class ProcurementService {
     await this.audit.record({
       tenantId: order.tenantId,
       actorUserId: session.user.id,
-      action: "procurement.delivery-plan.create",
+      action: "procurement:delivery-plan:create",
       entityType: "purchaseOrder",
       entityId: order.id,
       newValues: created,
@@ -1130,7 +1147,7 @@ export class ProcurementService {
     await this.audit.record({
       tenantId: order.tenantId,
       actorUserId: session.user.id,
-      action: "procurement.delivery-plan.update",
+      action: "procurement:delivery-plan:update",
       entityType: "purchaseOrder",
       entityId: order.id,
       previousValues: existing,
@@ -1309,19 +1326,29 @@ export class ProcurementService {
         ) as any;
       }
 
-      const hasOverride = line.unitCost != null && line.overrideReason;
-      if (hasOverride && !hasPermission(session, "procurement.cost.override")) {
-        this.authorization.requirePermissions(session, ["procurement.cost.override"]);
-      }
-
-      const resolvedUnitCost = hasOverride
-        ? this.money(line.unitCost!)
-        : selectedPrice
+        const catalogCost = selectedPrice
           ? this.money(selectedPrice.promotionalCost ?? selectedPrice.baseCost)
-          : line.unitCost != null
-            ? this.money(line.unitCost)
-            : new Prisma.Decimal(0);
-      const quantity = this.money(line.quantity);
+          : new Prisma.Decimal(0);
+
+        let resolvedUnitCost = catalogCost;
+        let hasOverride = false;
+
+        if (line.unitCost != null) {
+          const providedCost = this.money(line.unitCost);
+          if (!providedCost.equals(catalogCost)) {
+            if (!line.overrideReason?.trim()) {
+              throw new BadRequestException("overrideReason is required when overriding a known cost.");
+            }
+            hasOverride = true;
+            resolvedUnitCost = providedCost;
+          }
+        }
+
+        if (hasOverride && !hasPermission(session, "procurement:cost:override")) {
+          this.authorization.requirePermissions(session, ["procurement:cost:override"]);
+        }
+
+        const quantity = this.money(line.quantity);
       const taxRate = line.taxRate != null ? this.decimal(line.taxRate) : new Prisma.Decimal(0);
       const { lineSubtotal, taxAmount, lineTotal } = calculateOrderLine(quantity, resolvedUnitCost, taxRate);
 
@@ -1430,7 +1457,7 @@ export class ProcurementService {
   }
 
   private sanitizeProcurementPayload<T>(payload: T, session: SessionContext): T {
-    if (hasPermission(session, "procurement.cost.view")) {
+    if (hasPermission(session, "procurement:cost:view")) {
       return payload;
     }
 

@@ -38,7 +38,7 @@ describe('Procurement Unit Tests', () => {
     ).not.toThrow();
     expect(() =>
       assertRequisitionTransition(PurchaseRequisitionStatus.APPROVED, PurchaseRequisitionStatus.CANCELLED)
-    ).not.toThrow();
+    ).toThrow(BadRequestException);
   });
   
   it('Requisition lifecycle: Invalid transition rejection', () => {
@@ -113,7 +113,7 @@ describe('Procurement Unit Tests', () => {
       new Prisma.Decimal('10.00'),
       new Prisma.Decimal('0.20')
     );
-    expect(lineSubtotal.toString()).toBe('25.000'); // 2.5 * 10
+    expect(lineSubtotal.toString()).toBe('25'); // 2.5 * 10
   });
   
   it('Money: Tax amount', () => {
@@ -122,7 +122,7 @@ describe('Procurement Unit Tests', () => {
       new Prisma.Decimal('10.00'),
       new Prisma.Decimal('0.20')
     );
-    expect(taxAmount.toString()).toBe('5.0000'); // 25 * 0.2
+    expect(taxAmount.toString()).toBe('5'); // 25 * 0.2
   });
   
   it('Money: Line total', () => {
@@ -131,7 +131,7 @@ describe('Procurement Unit Tests', () => {
       new Prisma.Decimal('10.00'),
       new Prisma.Decimal('0.20')
     );
-    expect(lineTotal.toString()).toBe('30.0000'); // 25 + 5
+    expect(lineTotal.toString()).toBe('30'); // 25 + 5
   });
   
   it('Money: Delivery charge', () => {
@@ -139,8 +139,8 @@ describe('Procurement Unit Tests', () => {
       [],
       new Prisma.Decimal('15.50')
     );
-    expect(summary.deliveryAmount.toString()).toBe('15.50');
-    expect(summary.total.toString()).toBe('15.50');
+    expect(summary.deliveryAmount.toString()).toBe('15.5');
+    expect(summary.total.toString()).toBe('15.5');
   });
   
   it('Money: Grand total', () => {

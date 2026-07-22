@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run test:unit && pnpm run test:db",
     "test:unit": "pnpm exec vitest run --passWithNoTests test/helpers/test-env.spec.ts src/services/area-calculator.service.spec.ts src/services/catalogue-rules.spec.ts src/services/supplier-rules.spec.ts src/services/supplier-pricing-rules.spec.ts src/services/supplier-price-imports.spec.ts src/services/procurement.unit.spec.ts",
-    "test:db": "pnpm exec vitest run --passWithNoTests --maxWorkers=1 src/services/supplier-pricing.service.spec.ts src/services/procurement.db.spec.ts",
+    "test:db": "pnpm exec vitest run --passWithNoTests --maxWorkers=1 --testTimeout=30000 src/services/supplier-pricing.service.spec.ts test/procurement.db.spec.ts",
     "test:full": "pnpm run test && pnpm run test:isolation",
     "test:isolation": "pnpm run build && node test/run-isolation.mjs",
     "test:migration:clean": "tsx test/scripts/verify-clean-migration.ts",

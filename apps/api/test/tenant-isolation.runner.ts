@@ -9,6 +9,9 @@ import {
 import {
   createIsolationFixtures,
   signInThroughApi,
+  createUser,
+  attachMembershipRole,
+  rolePermissions,
   type IsolationFixtureSet,
 } from "./helpers/tenant-fixtures";
 
@@ -94,6 +97,12 @@ let ownerAAgent: HttpClient;
 let ownerBAgent: HttpClient;
 let branchA1Agent: HttpClient;
 let staffAAgent: HttpClient;
+let viewerAgent: HttpClient;
+let noCancelAgent: HttpClient;
+let noCostReadAgent: HttpClient;
+let noCostOverrideAgent: HttpClient;
+let creatorAgent: HttpClient;
+let unauthAgent: HttpClient;
 let fixtures: IsolationFixtureSet;
 
 const buildImportFormData = (csvText: string) => {
@@ -205,9 +214,313 @@ const setupCase = async () => {
   await signInThroughApi(ownerBAgent, fixtures.ownerB.user.email);
   await signInThroughApi(branchA1Agent, fixtures.branchUserA1.user.email);
   await signInThroughApi(staffAAgent, fixtures.staffA.user.email);
+  
+  const [viewerUser, noCancelUser, noCostReadUser, noCostOverrideUser] = await Promise.all([
+    createUser({ email: "viewer-a@example.test", firstName: "V", lastName: "V" }),
+    createUser({ email: "nocancel-a@example.test", firstName: "NC", lastName: "NC" }),
+    createUser({ email: "nocost-a@example.test", firstName: "NCR", lastName: "NCR" }),
+    createUser({ email: "nocostoverride-a@example.test", firstName: "NCO", lastName: "NCO" }),
+  ]);
+  
+  const viewerRole = await prisma.role.upsert({
+    where: { key: "VIEWER_PERM_TEST" },
+    update: {},
+    create: { key: "VIEWER_PERM_TEST", name: "Viewer Test", scope: "TENANT", isSystem: false, isActive: true },
+  });
+  const noCancelRole = await prisma.role.upsert({
+    where: { key: "NO_CANCEL_TEST" },
+    update: {},
+    create: { key: "NO_CANCEL_TEST", name: "No Cancel Test", scope: "TENANT", isSystem: false, isActive: true },
+  });
+  const noCostReadRole = await prisma.role.upsert({
+    where: { key: "NO_COST_READ_TEST" },
+    update: {},
+    create: { key: "NO_COST_READ_TEST", name: "No Cost Read Test", scope: "TENANT", isSystem: false, isActive: true },
+  });
+  const noCostOverrideRole = await prisma.role.upsert({
+    where: { key: "NO_COST_OVERRIDE_TEST" },
+    update: {},
+    create: { key: "NO_COST_OVERRIDE_TEST", name: "No Cost Override Test", scope: "TENANT", isSystem: false, isActive: true },
+  });
+  
+  const ensurePerms = async (roleId: string, perms: readonly string[]) => {
+    for (const p of perms) {
+      const perm = await prisma.permission.upsert({
+        where: { key: p },
+        update: {},
+        create: { key: p, description: p, group: "Test" }
+      });
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId, permissionId: perm.id } },
+        update: {},
+        create: { roleId, permissionId: perm.id },
+      });
+    }
+  };
+  
+  await ensurePerms(viewerRole.id, rolePermissions.VIEWER);
+  
+  const creatorRole = await prisma.role.upsert({
+    where: { key: "CREATOR_TEST" },
+    update: {},
+    create: { key: "CREATOR_TEST", name: "Creator Test", scope: "TENANT", isSystem: false, isActive: true },
+  });
+  await ensurePerms(creatorRole.id, rolePermissions.PROCUREMENT_STAFF);
+  
+  const creatorUser = (await createUser({ email: "creator-a@example.test", firstName: "C", lastName: "C" }));
+  const creatorA = await prisma.tenantMembership.create({
+    data: { tenantId: fixtures.tenantA.id, userId: creatorUser.id, status: "ACTIVE", defaultBranchId: fixtures.branchA1.id },
+  });
+  await attachMembershipRole(creatorA.id, creatorRole);
+  creatorAgent = new HttpClient(baseUrl);
+  await signInThroughApi(creatorAgent, creatorUser.email);
+  
+  const baseStaffPerms = rolePermissions.PROCUREMENT_MANAGER;
+  await ensurePerms(noCancelRole.id, baseStaffPerms.filter(p => p !== 'procurement:order:cancel'));
+  await ensurePerms(noCostReadRole.id, baseStaffPerms.filter(p => p !== 'procurement:cost:read'));
+  await ensurePerms(noCostOverrideRole.id, baseStaffPerms.filter(p => p !== 'procurement:cost:override'));
+  
+  const viewerA = await prisma.tenantMembership.create({
+    data: { tenantId: fixtures.tenantA.id, userId: viewerUser.id, status: "ACTIVE", defaultBranchId: fixtures.branchA1.id },
+  });
+  const noCancelA = await prisma.tenantMembership.create({
+    data: { tenantId: fixtures.tenantA.id, userId: noCancelUser.id, status: "ACTIVE", defaultBranchId: fixtures.branchA1.id },
+  });
+  const noCostReadA = await prisma.tenantMembership.create({
+    data: { tenantId: fixtures.tenantA.id, userId: noCostReadUser.id, status: "ACTIVE", defaultBranchId: fixtures.branchA1.id },
+  });
+  const noCostOverrideA = await prisma.tenantMembership.create({
+    data: { tenantId: fixtures.tenantA.id, userId: noCostOverrideUser.id, status: "ACTIVE", defaultBranchId: fixtures.branchA1.id },
+  });
+  
+  await attachMembershipRole(viewerA.id, viewerRole);
+  await attachMembershipRole(noCancelA.id, noCancelRole);
+  await attachMembershipRole(noCostReadA.id, noCostReadRole);
+  await attachMembershipRole(noCostOverrideA.id, noCostOverrideRole);
+  
+  viewerAgent = new HttpClient(baseUrl);
+  noCancelAgent = new HttpClient(baseUrl);
+  noCostReadAgent = new HttpClient(baseUrl);
+  noCostOverrideAgent = new HttpClient(baseUrl);
+  unauthAgent = new HttpClient(baseUrl);
+  
+  await signInThroughApi(viewerAgent, viewerUser.email);
+  await signInThroughApi(noCancelAgent, noCancelUser.email);
+  await signInThroughApi(noCostReadAgent, noCostReadUser.email);
+  await signInThroughApi(noCostOverrideAgent, noCostOverrideUser.email);
 };
 
 const tests: TestCase[] = [
+
+  {
+    name: "Viewer cannot create Requisition",
+    run: async () => {
+      const response = await viewerAgent.post("/api/v1/purchase-requisitions").send({
+        branchId: fixtures.branchA1.id,
+        lines: [
+          {
+            productId: fixtures.productA.id,
+            description: "Test",
+            requestedQuantity: 1,
+            unit: "EACH",
+            displayOrder: 1,
+          },
+        ],
+      });
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "Creator cannot approve Requisition",
+    run: async () => {
+      const req = await creatorAgent.post("/api/v1/purchase-requisitions").send({
+        branchId: fixtures.branchA1.id,
+        lines: [
+          {
+            productId: fixtures.productA.id,
+            description: "Test",
+            requestedQuantity: 1,
+            unit: "EACH",
+            displayOrder: 1,
+          },
+        ],
+      });
+      assert.equal(req.status, 201);
+      const sub = await creatorAgent.post(`/api/v1/purchase-requisitions/${req.body.id}/submit`).send({});
+      assert.equal(sub.status, 201);
+      const response = await creatorAgent.post(`/api/v1/purchase-requisitions/${req.body.id}/approve`).send({});
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "Creator cannot approve PO",
+    run: async () => {
+      const po = await creatorAgent.post("/api/v1/purchase-orders").send({
+        branchId: fixtures.branchA1.id,
+        supplierId: fixtures.supplierA.id,
+        currency: "GBP",
+        lines: [
+          {
+            productId: fixtures.productA.id,
+            description: "Test",
+            quantity: 1,
+            unit: "EACH",
+            
+            taxRate: 0.20,
+            displayOrder: 1,
+            
+          },
+        ],
+      });
+      if (po.status !== 201) console.error("PO Creation failed:", po.body); assert.equal(po.status, 201);
+      const sub = await creatorAgent.post(`/api/v1/purchase-orders/${po.body.id}/submit`).send({});
+      assert.equal(sub.status, 201);
+      const response = await creatorAgent.post(`/api/v1/purchase-orders/${po.body.id}/approve`).send({});
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "Staff cannot issue PO",
+    run: async () => {
+      const po = await ownerAAgent.post("/api/v1/purchase-orders").send({
+        branchId: fixtures.branchA1.id,
+        supplierId: fixtures.supplierA.id,
+        currency: "GBP",
+        lines: [{ productId: fixtures.productA.id, description: "Test", quantity: 1, unit: "EACH",  taxRate: 0.20, displayOrder: 1,  }],
+      });
+      await ownerAAgent.post(`/api/v1/purchase-orders/${po.body.id}/submit`).send({});
+      await ownerAAgent.post(`/api/v1/purchase-orders/${po.body.id}/approve`).send({});
+      
+      const response = await creatorAgent.post(`/api/v1/purchase-orders/${po.body.id}/issue`).send({});
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "User without cancel permission cannot cancel",
+    run: async () => {
+      const req = await noCancelAgent.post("/api/v1/purchase-orders").send({
+        branchId: fixtures.branchA1.id,
+        supplierId: fixtures.supplierA.id,
+        currency: "GBP",
+        lines: [{ productId: fixtures.productA.id, description: "Test", quantity: 1, unit: "EACH", displayOrder: 1 }],
+      });
+      assert.equal(req.status, 201);
+      const response = await noCancelAgent.post(`/api/v1/purchase-orders/${req.body.id}/cancel`).send({});
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "User without cost-read permission cannot view Supplier cost",
+    run: async () => {
+      const req = await ownerAAgent.post("/api/v1/purchase-requisitions").send({
+        branchId: fixtures.branchA1.id,
+        lines: [{ productId: fixtures.productA.id, description: "Test", requestedQuantity: 1, unit: "EACH", displayOrder: 1 }],
+      });
+      assert.equal(req.status, 201);
+      await ownerAAgent.post(`/api/v1/purchase-requisitions/${req.body.id}/submit`).send({});
+      await ownerAAgent.post(`/api/v1/purchase-requisitions/${req.body.id}/approve`).send({});
+      const po = await ownerAAgent.post(`/api/v1/purchase-requisitions/${req.body.id}/create-purchase-order`).send({
+        supplierId: fixtures.supplierA.id,
+        lines: [{ 
+          purchaseRequisitionLineId: req.body.lines[0].id,
+          productId: fixtures.productA.id, 
+          quantity: 1,
+          unit: "EACH",
+          
+          taxRate: 0.20,
+          displayOrder: 1,
+          
+        }],
+      });
+      if (po.status !== 201) console.error("PO Creation failed:", po.body); assert.equal(po.status, 201);
+      
+      const response = await noCostReadAgent.get(`/api/v1/purchase-orders/${po.body.id}`);
+      assert.equal(response.status, 200);
+      assert.ok(response.body.versions[0].subtotal == null);
+      assert.ok(response.body.versions[0].lines[0].unitCost == null);
+    },
+  },
+  {
+    name: "User without cost-override permission cannot override cost",
+    run: async () => {
+      const response = await noCostOverrideAgent.post("/api/v1/purchase-orders").send({
+        branchId: fixtures.branchA1.id,
+        supplierId: fixtures.supplierA.id,
+        currency: "GBP",
+        lines: [{ productId: fixtures.productA.id, description: "Test", quantity: 1, unit: "EACH", unitCost: 15, taxRate: 0.20, displayOrder: 1, overrideReason: "test" }],
+      });
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "Override without reason fails",
+    run: async () => {
+      const response = await ownerAAgent.post("/api/v1/purchase-orders").send({
+        branchId: fixtures.branchA1.id,
+        supplierId: fixtures.supplierA.id,
+        currency: "GBP",
+        lines: [{ productId: fixtures.productA.id, description: "Test", quantity: 1, unit: "EACH", unitCost: 15, taxRate: 0.20, displayOrder: 1 }],
+      });
+      assert.equal(response.status, 400);
+    },
+  },
+  {
+    name: "Acknowledgement permission enforced",
+    run: async () => {
+      const po = await ownerAAgent.post("/api/v1/purchase-orders").send({
+        branchId: fixtures.branchA1.id,
+        supplierId: fixtures.supplierA.id,
+        currency: "GBP",
+        lines: [{ productId: fixtures.productA.id, description: "Test", quantity: 1, unit: "EACH",  taxRate: 0.20, displayOrder: 1,  }],
+      });
+      await ownerAAgent.post(`/api/v1/purchase-orders/${po.body.id}/submit`).send({});
+      await ownerAAgent.post(`/api/v1/purchase-orders/${po.body.id}/approve`).send({});
+      await ownerAAgent.post(`/api/v1/purchase-orders/${po.body.id}/issue`).send({});
+      
+      const response = await viewerAgent.post(`/api/v1/purchase-orders/${po.body.id}/acknowledgements`).send({
+        reference: "ACK-1",
+        receivedAt: new Date().toISOString(),
+      });
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "Delivery Plan permission enforced",
+    run: async () => {
+      const po = await ownerAAgent.post("/api/v1/purchase-orders").send({
+        branchId: fixtures.branchA1.id,
+        supplierId: fixtures.supplierA.id,
+        currency: "GBP",
+        lines: [{ productId: fixtures.productA.id, description: "Test", quantity: 1, unit: "EACH",  taxRate: 0.20, displayOrder: 1,  }],
+      });
+      const response = await viewerAgent.post(`/api/v1/purchase-orders/${po.body.id}/delivery-plans`).send({
+        status: "PLANNED",
+      });
+      assert.equal(response.status, 403);
+    },
+  },
+  {
+    name: "Public/customer access denied",
+    run: async () => {
+      const response = await unauthAgent.get("/api/v1/purchase-requisitions");
+      assert.equal(response.status, 401);
+    },
+  },
+  {
+    name: "Supplier print payload contains no internal fields",
+    run: async () => {
+      const po = await ownerAAgent.post("/api/v1/purchase-orders").send({
+        branchId: fixtures.branchA1.id,
+        supplierId: fixtures.supplierA.id,
+        currency: "GBP",
+        lines: [{ productId: fixtures.productA.id, description: "Test", quantity: 1, unit: "EACH",  taxRate: 0.20, displayOrder: 1, overrideReason: "Discount" }],
+      });
+      const response = await ownerAAgent.get(`/api/v1/purchase-orders/${po.body.id}/print`);
+      assert.equal(response.status, 200);
+      assert.equal(response.body.versions[0].lines[0].overrideReason, undefined);
+    },
+  },
+
   {
     name: "tenant A cannot retrieve tenant B branch by id",
     run: async () => {

@@ -4,7 +4,9 @@ import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 
-const DB_URL = process.env.DATABASE_URL as string;
+const DB_URL = "postgresql://postgres:postgres@localhost:55432/tradesperson_phased_upgrade_test?schema=public";
+process.env.DATABASE_URL = DB_URL;
+process.env.DIRECT_URL = DB_URL;
 
 const ROOT_DIR = path.resolve(__dirname, '../../../..');
 const DB_DIR = path.join(ROOT_DIR, 'packages/db');

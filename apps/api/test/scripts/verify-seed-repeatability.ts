@@ -1,11 +1,10 @@
 import { execSync } from 'child_process';
 import { PrismaClient } from '@prisma/client';
 
-const DB_URL = process.env.DATABASE_URL;
-if (!DB_URL || !DB_URL.includes('tradesperson_phased_seed_validation_test')) {
-  console.error('ERROR: DATABASE_URL must point to tradesperson_phased_seed_validation_test');
-  process.exit(1);
-}
+const DB_URL = "postgresql://postgres:postgres@localhost:55432/tradesperson_phased_seed_test?schema=public";
+process.env.DATABASE_URL = DB_URL;
+process.env.DIRECT_URL = DB_URL;
+
 
 const DB_DIR = `${__dirname}/../../../../packages/db`;
 

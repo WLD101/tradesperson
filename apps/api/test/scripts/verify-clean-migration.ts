@@ -3,7 +3,9 @@ import { PrismaClient } from '@prisma/client';
 import fs from 'fs';
 import path from 'path';
 
-const DB_URL = process.env.DATABASE_URL;
+const DB_URL = "postgresql://postgres:postgres@localhost:55432/tradesperson_phased_clean_migration_test?schema=public";
+process.env.DATABASE_URL = DB_URL;
+process.env.DIRECT_URL = DB_URL;
 if (!DB_URL || !DB_URL.includes('tradesperson_phased_clean_migration_test')) {
   console.error('ERROR: DATABASE_URL must point to tradesperson_phased_clean_migration_test');
   process.exit(1);

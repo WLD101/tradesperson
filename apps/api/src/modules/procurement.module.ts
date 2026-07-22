@@ -222,6 +222,13 @@ class ProcurementController {
     return this.procurement.getPurchaseOrder(session, id);
   }
 
+  @Get("purchase-orders/:id/print")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("procurement:order:read")
+  getPurchaseOrderPrint(@Param("id") id: string, @CurrentSession() session: TenantSession) {
+    return this.procurement.getPurchaseOrderPrint(session, id);
+  }
+
   @Patch("purchase-orders/:id")
   @UseGuards(AuthGuard, PermissionsGuard)
   @RequirePermissions("procurement:order:write")

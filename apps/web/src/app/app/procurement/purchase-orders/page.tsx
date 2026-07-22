@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Card } from "@tradesperson/ui";
-import { getSession } from "@/lib/api";
 import { apiFetch } from "@/lib/api";
 
 export default async function PurchaseOrdersPage({
@@ -8,7 +7,7 @@ export default async function PurchaseOrdersPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await getSession();
+  // session not used yet
   const params = await searchParams;
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {

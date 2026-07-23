@@ -1,11 +1,21 @@
 import { hashPassword, hashToken } from "@tradesperson/auth";
-import { PrismaClient, RoleScope, SubscriptionStatus } from "@prisma/client";
+import { EstimateLineType, Prisma, PrismaClient, RoleScope, SubscriptionStatus } from "@prisma/client";
 import { parse } from "papaparse";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { seedProcurement } from "./seed-procurement";
 
 const prisma = new PrismaClient();
+
+const estimatePermissionKeys = [
+  "estimate:read",
+  "estimate:create",
+  "estimate:write",
+  "estimate:calculate",
+  "estimate:approve",
+  "estimate:cost:read",
+  "estimate:cost:override",
+] as const;
 
 const permissions = [
   ["settings:manage", "Administration", "Manage tenant business settings"],
@@ -81,6 +91,13 @@ const permissions = [
   ["procurement:delivery-plan:write", "Procurement", "Manage purchase-order delivery plans"],
   ["procurement:cost:read", "Procurement", "View internal procurement cost data"],
   ["procurement:cost:override", "Procurement", "Override resolved procurement cost with reason"],
+  ["estimate:read", "Estimates", "View estimates and estimate versions"],
+  ["estimate:create", "Estimates", "Create estimates from surveys and customer sites"],
+  ["estimate:write", "Estimates", "Manage draft and calculated estimates"],
+  ["estimate:calculate", "Estimates", "Recalculate estimate pricing and margins"],
+  ["estimate:approve", "Estimates", "Mark estimates ready for quote"],
+  ["estimate:cost:read", "Estimates", "View internal estimate cost and margin data"],
+  ["estimate:cost:override", "Estimates", "Override resolved estimate costs with reason"],
   ["leads:view", "CRM", "View leads"],
   ["leads:manage", "CRM", "Create and update leads"],
   ["customers:view", "CRM", "View customers"],
@@ -134,6 +151,7 @@ const tenantRoles = {
     "procurement:delivery-plan:write",
     "procurement:cost:read",
     "procurement:cost:override",
+    ...estimatePermissionKeys,
     "leads:view",
     "leads:manage",
     "customers:view",
@@ -180,6 +198,7 @@ const tenantRoles = {
     "procurement:delivery-plan:write",
     "procurement:cost:read",
     "procurement:cost:override",
+    ...estimatePermissionKeys,
     "leads:view",
     "leads:manage",
     "customers:view",
@@ -193,6 +212,7 @@ const tenantRoles = {
     "branches:view",
     "catalogue:view",
     "suppliers:view",
+    "estimate:read",
     "leads:view",
     "customers:view",
     "properties:view",
@@ -220,6 +240,7 @@ const tenantRoles = {
     "procurement:delivery-plan:write",
     "procurement:cost:read",
     "procurement:cost:override",
+    ...estimatePermissionKeys,
   ],
   PROCUREMENT_STAFF: [
     "branches:view",
@@ -235,6 +256,11 @@ const tenantRoles = {
     "procurement:order:write",
     "procurement:order:submit",
     "procurement:cost:read",
+    "estimate:read",
+    "estimate:create",
+    "estimate:write",
+    "estimate:calculate",
+    "estimate:cost:read",
   ],
   VIEWER: [
     "branches:view",
@@ -248,6 +274,7 @@ const tenantRoles = {
     "supplier_pricing.history:view",
     "procurement:requisition:read",
     "procurement:order:read",
+    "estimate:read",
     "leads:view",
     "customers:view",
     "properties:view",
@@ -490,27 +517,28 @@ async function main() {
   await prisma.tenantSetting.upsert({
     where: { tenantId: tenant.id },
     update: {
-      quoteNumberPrefix: "QEF",
+      quoteNumberPrefix: "QUO",
       invoiceNumberPrefix: "IEF",
-      jobNumberPrefix: "JEF",
+      jobNumberPrefix: "JOB",
     },
     create: {
       tenantId: tenant.id,
-      quoteNumberPrefix: "QEF",
+      quoteNumberPrefix: "QUO",
       invoiceNumberPrefix: "IEF",
-      jobNumberPrefix: "JEF",
+      jobNumberPrefix: "JOB",
     },
   });
 
   for (const [key, prefix] of [
-    ["quote", "QEF"],
+    ["estimate", "EST"],
+    ["quote", "QUO"],
     ["invoice", "IEF"],
-    ["job", "JEF"],
+    ["job", "JOB"],
   ] as const) {
     await prisma.numberSequence.upsert({
       where: { tenantId_key: { tenantId: tenant.id, key } },
-      update: { prefix, nextValue: 1, padding: 5 },
-      create: { tenantId: tenant.id, key, prefix, nextValue: 1, padding: 5 },
+      update: { prefix, nextValue: 1, padding: 6 },
+      create: { tenantId: tenant.id, key, prefix, nextValue: 1, padding: 6 },
     });
   }
 
@@ -632,7 +660,7 @@ async function main() {
     },
   });
 
-  await prisma.site.upsert({
+  const demoSite = await prisma.site.upsert({
     where: { id: "f95ed7a0-b5d7-4717-ae4c-669b26a1e2d2" },
     update: {
       tenantId: tenant.id,
@@ -1842,6 +1870,11 @@ async function main() {
     },
   ] as const;
 
+  const currentPriceBySkuAndBasis = new Map<
+    string,
+    Awaited<ReturnType<typeof prisma.supplierProductPrice.create>>
+  >();
+
   for (const definition of priceDefinitions) {
     const supplierProduct = getRequiredMapValue(
       supplierProductBySku,
@@ -1876,6 +1909,10 @@ async function main() {
         updatedById: owner.id,
       },
     });
+
+    if (!definition.expiryDate) {
+      currentPriceBySkuAndBasis.set(`${definition.supplierSku}:${definition.priceBasis}`, price);
+    }
 
     await prisma.supplierProductPriceHistory.create({
       data: {
@@ -1934,6 +1971,290 @@ async function main() {
       createdById: owner.id,
       updatedById: owner.id,
     },
+  });
+
+  await prisma.estimateVersion.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.estimateLine.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.estimateRoom.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.estimate.deleteMany({ where: { tenantId: tenant.id } });
+
+  const money = (value: number | string | Prisma.Decimal) => new Prisma.Decimal(value);
+  const calculateSeedLine = (input: {
+    lineType: EstimateLineType;
+    quantity: Prisma.Decimal;
+    unitCost: Prisma.Decimal;
+    unitSellPrice: Prisma.Decimal;
+    vatRate: Prisma.Decimal;
+  }) => {
+    const sign =
+      input.lineType === EstimateLineType.DISCOUNT
+        ? new Prisma.Decimal(-1)
+        : new Prisma.Decimal(1);
+    const costTotal = input.quantity.mul(input.unitCost);
+    const sellTotal = input.quantity.mul(input.unitSellPrice).mul(sign);
+    const marginAmount = sellTotal.minus(costTotal.mul(sign));
+    const marginPercent = sellTotal.equals(0)
+      ? new Prisma.Decimal(0)
+      : marginAmount.div(sellTotal).mul(100);
+    const vatAmount = sellTotal.mul(input.vatRate);
+    const lineTotal = sellTotal.plus(vatAmount);
+    return { costTotal, sellTotal, marginAmount, marginPercent, vatAmount, lineTotal };
+  };
+  const summarizeSeedEstimate = (
+    lines: Array<{
+      lineType: EstimateLineType;
+      costTotal: Prisma.Decimal;
+      sellTotal: Prisma.Decimal;
+      vatAmount: Prisma.Decimal;
+      lineTotal: Prisma.Decimal;
+    }>,
+    vatRate: Prisma.Decimal,
+  ) => {
+    const subtotal = lines.reduce((sum, line) => sum.plus(line.sellTotal), money(0));
+    const materialCost = lines
+      .filter((line) => line.lineType === EstimateLineType.MATERIAL)
+      .reduce((sum, line) => sum.plus(line.costTotal), money(0));
+    const labourCost = lines
+      .filter((line) => line.lineType === EstimateLineType.LABOUR)
+      .reduce((sum, line) => sum.plus(line.costTotal), money(0));
+    const accessoryCost = lines
+      .filter((line) => line.lineType === EstimateLineType.ACCESSORY)
+      .reduce((sum, line) => sum.plus(line.costTotal), money(0));
+    const supplierCost = materialCost.plus(accessoryCost);
+    const discountAmount = lines
+      .filter((line) => line.lineType === EstimateLineType.DISCOUNT)
+      .reduce((sum, line) => sum.plus(line.sellTotal.abs()), money(0));
+    const vatAmount = lines.reduce((sum, line) => sum.plus(line.vatAmount), money(0));
+    const grandTotal = lines.reduce((sum, line) => sum.plus(line.lineTotal), money(0));
+    const grossProfit = subtotal.minus(materialCost).minus(labourCost).minus(accessoryCost);
+    const grossMarginPercent = subtotal.equals(0)
+      ? money(0)
+      : grossProfit.div(subtotal).mul(100);
+    return {
+      subtotal,
+      materialCost,
+      labourCost,
+      accessoryCost,
+      supplierCost,
+      marginAmount: grossProfit,
+      discountAmount,
+      vatRate,
+      vatAmount,
+      grandTotal,
+      grossProfit,
+      grossMarginPercent,
+    };
+  };
+
+  const carpetProduct = getRequiredMapValue(productBySlug, "heather-loop-carpet", "product");
+  const carpetVariant = carpetProduct.variants.find((item) => item.isDefault) ?? null;
+  const carpetSupplierProduct = getRequiredMapValue(
+    supplierProductBySku,
+    "PFD-CARP-4M-001",
+    "supplier product",
+  );
+  const carpetPrice = getRequiredMapValue(
+    currentPriceBySkuAndBasis,
+    "PFD-CARP-4M-001:SQUARE_METRE",
+    "supplier product price",
+  );
+  const edgeProduct = getRequiredMapValue(productBySlug, "edgeform-door-profile", "product");
+  const edgeVariant = edgeProduct.variants.find((item) => item.isDefault) ?? null;
+  const edgeSupplierProduct = getRequiredMapValue(
+    supplierProductBySku,
+    "TEP-EDGE-09",
+    "supplier product",
+  );
+  const edgePrice = getRequiredMapValue(
+    currentPriceBySkuAndBasis,
+    "TEP-EDGE-09:EACH",
+    "supplier product price",
+  );
+  const vatRate = money("0.2");
+  const loungeArea = money("22.7810");
+  const carpetLine = calculateSeedLine({
+    lineType: EstimateLineType.MATERIAL,
+    quantity: loungeArea,
+    unitCost: money(carpetPrice.baseCost),
+    unitSellPrice: money("31.50"),
+    vatRate,
+  });
+  const labourLine = calculateSeedLine({
+    lineType: EstimateLineType.LABOUR,
+    quantity: money("18"),
+    unitCost: money("22"),
+    unitSellPrice: money("42"),
+    vatRate,
+  });
+  const accessoryLine = calculateSeedLine({
+    lineType: EstimateLineType.ACCESSORY,
+    quantity: money("8"),
+    unitCost: money(edgePrice.baseCost),
+    unitSellPrice: money("15"),
+    vatRate,
+  });
+  const estimateSummary = summarizeSeedEstimate(
+    [
+      { lineType: EstimateLineType.MATERIAL, ...carpetLine },
+      { lineType: EstimateLineType.LABOUR, ...labourLine },
+      { lineType: EstimateLineType.ACCESSORY, ...accessoryLine },
+    ],
+    vatRate,
+  );
+
+  const calculatedEstimate = await prisma.estimate.create({
+    data: {
+      tenantId: tenant.id,
+      branchId: headOffice.id,
+      customerId: demoCustomer.id,
+      siteId: demoSite.id,
+      estimateNumber: "EST-2026-000001",
+      status: "READY_FOR_QUOTE",
+      title: "Johnson lounge and hallway carpet refit",
+      currency: "GBP",
+      ...estimateSummary,
+      internalNotes: "Seeded estimate for previewing measurement-to-price calculations.",
+      customerNotes: "Includes lounge, hallway threshold profiles, labour and VAT.",
+      createdById: owner.id,
+      updatedById: owner.id,
+      rooms: {
+        create: [
+          {
+            tenantId: tenant.id,
+            roomName: "Lounge",
+            grossArea: "20.7100",
+            deductionArea: "0",
+            netArea: "20.7100",
+            wastePercent: "10",
+            requiredArea: loungeArea,
+            perimeter: "18.4000",
+            notes: "Waste-adjusted area carried into material line.",
+            displayOrder: 0,
+          },
+          {
+            tenantId: tenant.id,
+            roomName: "Hallway",
+            grossArea: "7.1200",
+            deductionArea: "0.4000",
+            netArea: "6.7200",
+            wastePercent: "10",
+            requiredArea: "7.3920",
+            perimeter: "11.6000",
+            displayOrder: 1,
+          },
+        ],
+      },
+      lines: {
+        create: [
+          {
+            tenantId: tenant.id,
+            lineType: "MATERIAL",
+            productId: carpetProduct.id,
+            productVariantId: carpetVariant?.id ?? null,
+            supplierProductId: carpetSupplierProduct.id,
+            supplierProductPriceId: carpetPrice.id,
+            description: "Heather Loop Carpet supplied and cut",
+            quantity: loungeArea,
+            unit: "SQM",
+            unitCost: carpetPrice.baseCost,
+            unitSellPrice: "31.5000",
+            ...carpetLine,
+            vatRate,
+            priceSnapshot: {
+              supplierPriceId: carpetPrice.id,
+              priceListVersionId: carpetPrice.priceListVersionId,
+              priceBasis: carpetPrice.priceBasis,
+              currency: carpetPrice.currency,
+              baseCost: carpetPrice.baseCost,
+              supplierSku: carpetSupplierProduct.supplierSku,
+            },
+            displayOrder: 0,
+          },
+          {
+            tenantId: tenant.id,
+            lineType: "LABOUR",
+            description: "Preparation, fitting and finishing labour",
+            quantity: "18",
+            unit: "HOUR",
+            unitCost: "22",
+            unitSellPrice: "42",
+            ...labourLine,
+            vatRate,
+            displayOrder: 1,
+          },
+          {
+            tenantId: tenant.id,
+            lineType: "ACCESSORY",
+            productId: edgeProduct.id,
+            productVariantId: edgeVariant?.id ?? null,
+            supplierProductId: edgeSupplierProduct.id,
+            supplierProductPriceId: edgePrice.id,
+            description: "Door threshold profiles",
+            quantity: "8",
+            unit: "EACH",
+            unitCost: edgePrice.baseCost,
+            unitSellPrice: "15",
+            ...accessoryLine,
+            vatRate,
+            priceSnapshot: {
+              supplierPriceId: edgePrice.id,
+              priceListVersionId: edgePrice.priceListVersionId,
+              priceBasis: edgePrice.priceBasis,
+              currency: edgePrice.currency,
+              baseCost: edgePrice.baseCost,
+              supplierSku: edgeSupplierProduct.supplierSku,
+            },
+            displayOrder: 2,
+          },
+        ],
+      },
+    },
+    include: { rooms: true, lines: true },
+  });
+
+  await prisma.estimateVersion.create({
+    data: {
+      tenantId: tenant.id,
+      estimateId: calculatedEstimate.id,
+      versionNumber: 1,
+      status: "READY_FOR_QUOTE",
+      currency: calculatedEstimate.currency,
+      subtotal: calculatedEstimate.subtotal,
+      materialCost: calculatedEstimate.materialCost,
+      labourCost: calculatedEstimate.labourCost,
+      accessoryCost: calculatedEstimate.accessoryCost,
+      supplierCost: calculatedEstimate.supplierCost,
+      marginAmount: calculatedEstimate.marginAmount,
+      discountAmount: calculatedEstimate.discountAmount,
+      vatRate: calculatedEstimate.vatRate,
+      vatAmount: calculatedEstimate.vatAmount,
+      grandTotal: calculatedEstimate.grandTotal,
+      grossProfit: calculatedEstimate.grossProfit,
+      grossMarginPercent: calculatedEstimate.grossMarginPercent,
+      snapshot: JSON.parse(JSON.stringify(calculatedEstimate)),
+      createdById: owner.id,
+    },
+  });
+
+  await prisma.estimate.create({
+    data: {
+      tenantId: tenant.id,
+      branchId: headOffice.id,
+      customerId: demoCustomer.id,
+      siteId: demoSite.id,
+      estimateNumber: "EST-2026-000002",
+      status: "DRAFT",
+      title: "Johnson bathroom vinyl draft",
+      currency: "GBP",
+      internalNotes: "Draft seeded record for create/edit preview paths.",
+      createdById: manager.id,
+      updatedById: manager.id,
+    },
+  });
+
+  await prisma.numberSequence.update({
+    where: { tenantId_key: { tenantId: tenant.id, key: "estimate" } },
+    data: { nextValue: 3, prefix: "EST", padding: 6 },
   });
 
   await seedProcurement(prisma, tenant, headOffice, owner, manager);

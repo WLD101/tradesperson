@@ -20,6 +20,7 @@ import { CatalogueModule } from "./catalogue.module";
 import { SuppliersModule } from "./suppliers.module";
 import { SupplierPricingModule } from "./supplier-pricing.module";
 import { ProcurementModule } from "./procurement.module";
+import { EstimatesModule } from "./estimates.module";
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { ProcurementModule } from "./procurement.module";
     SuppliersModule,
     SupplierPricingModule,
     ProcurementModule,
+    EstimatesModule,
   ],
   providers: [{ provide: "APP_URL", useValue: loadEnv().API_URL }],
 })

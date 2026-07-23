@@ -284,6 +284,32 @@ enum PurchaseOrderDeliveryPlanStatus {
   COMPLETED
 }
 
+enum EstimateStatus {
+  DRAFT
+  CALCULATED
+  READY_FOR_QUOTE
+  QUOTED
+  ACCEPTED
+  REJECTED
+  CANCELLED
+}
+
+enum EstimateLineType {
+  MATERIAL
+  LABOUR
+  ACCESSORY
+  SERVICE
+  DISCOUNT
+}
+
+enum EstimateVersionStatus {
+  DRAFT
+  CALCULATED
+  READY_FOR_QUOTE
+  QUOTED
+  ARCHIVED
+}
+
 model User {
   id                String                 @id @default(uuid()) @db.Uuid
   email             String                 @unique
@@ -394,6 +420,10 @@ model Tenant {
   purchaseOrderLines         PurchaseOrderLine[]
   supplierAcknowledgements   SupplierAcknowledgement[]
   purchaseOrderDeliveryPlans PurchaseOrderDeliveryPlan[]
+  estimates                  Estimate[]
+  estimateRooms              EstimateRoom[]
+  estimateLines              EstimateLine[]
+  estimateVersions           EstimateVersion[]
 }
 
 model TenantMembership {
@@ -487,6 +517,7 @@ model Branch {
   supplierContacts     SupplierContact[]
   purchaseRequisitions PurchaseRequisition[]
   purchaseOrders       PurchaseOrder[]
+  estimates            Estimate[]
 
   @@unique([tenantId, branchCode])
   @@index([tenantId, status])
@@ -543,6 +574,7 @@ model Customer {
   sites          Site[]
   convertedLeads Lead[]       @relation("LeadConvertedCustomer")
   surveys        Survey[]
+  estimates      Estimate[]
 
   @@index([tenantId, displayName])
   @@index([branchId])
@@ -588,6 +620,7 @@ model Site {
   createdBy      User?    @relation("SiteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   updatedBy      User?    @relation("SiteUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   surveys        Survey[]
+  estimates      Estimate[]
 
   @@index([tenantId, customerId, createdAt])
   @@index([branchId])
@@ -632,6 +665,7 @@ model Survey {
   updatedBy User?    @relation("SurveyUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
   rooms SurveyRoom[]
+  estimates Estimate[]
 
   @@index([tenantId, siteId])
   @@index([tenantId, customerId])
@@ -679,6 +713,7 @@ model SurveyRoom {
   updatedBy    User?  @relation("SurveyRoomUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 
   components MeasurementComponent[]
+  estimateRooms EstimateRoom[]
 
   @@index([tenantId, surveyId])
 }
@@ -1069,6 +1104,7 @@ model SupplierProduct {
   priceHistory             SupplierProductPriceHistory[]
   purchaseRequisitionLines PurchaseRequisitionLine[]
   purchaseOrderLines       PurchaseOrderLine[]
+  estimateLines            EstimateLine[]
 
   @@unique([tenantId, supplierId, supplierSku])
   @@index([tenantId, supplierId, status])
@@ -1172,6 +1208,7 @@ model SupplierProductPrice {
   priceListVersion        SupplierPriceListVersion      @relation(fields: [priceListVersionId], references: [id], onDelete: Restrict)
   pricingUnit             UnitOfMeasure?                @relation("SupplierPriceUnit", fields: [pricingUnitId], references: [id], onDelete: SetNull)
   history                 SupplierProductPriceHistory[]
+  estimateLines           EstimateLine[]
 
   @@index([tenantId, supplierProductId, isActive, effectiveDate])
   @@index([tenantId, supplierId, priceListVersionId])
@@ -1319,6 +1356,157 @@ model PurchaseRequisition {
   @@unique([tenantId, requisitionNumber])
   @@index([tenantId, branchId, status, createdAt])
   @@index([tenantId, requiredDate])
+}
+
+model Estimate {
+  id              String         @id @default(uuid()) @db.Uuid
+  tenantId        String         @db.Uuid
+  branchId        String?        @db.Uuid
+  customerId      String         @db.Uuid
+  siteId          String         @db.Uuid
+  surveyId        String?        @db.Uuid
+  estimateNumber  String
+  status          EstimateStatus @default(DRAFT)
+  title           String?
+  currency        String         @default("GBP")
+  subtotal        Decimal        @default(0) @db.Decimal(14, 4)
+  materialCost    Decimal        @default(0) @db.Decimal(14, 4)
+  labourCost      Decimal        @default(0) @db.Decimal(14, 4)
+  accessoryCost   Decimal        @default(0) @db.Decimal(14, 4)
+  supplierCost    Decimal        @default(0) @db.Decimal(14, 4)
+  marginAmount    Decimal        @default(0) @db.Decimal(14, 4)
+  discountAmount  Decimal        @default(0) @db.Decimal(14, 4)
+  vatRate         Decimal        @default(0.2) @db.Decimal(8, 4)
+  vatAmount       Decimal        @default(0) @db.Decimal(14, 4)
+  grandTotal      Decimal        @default(0) @db.Decimal(14, 4)
+  grossProfit     Decimal        @default(0) @db.Decimal(14, 4)
+  grossMarginPercent Decimal     @default(0) @db.Decimal(8, 4)
+  internalNotes   String?
+  customerNotes   String?
+  createdById     String?        @db.Uuid
+  updatedById     String?        @db.Uuid
+  approvedById    String?        @db.Uuid
+  rejectedById    String?        @db.Uuid
+  approvedAt      DateTime?
+  rejectedAt      DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  tenant          Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch          Branch?        @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer        Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  site            Site           @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  survey          Survey?        @relation(fields: [surveyId], references: [id], onDelete: SetNull)
+  rooms           EstimateRoom[]
+  lines           EstimateLine[]
+  versions        EstimateVersion[]
+
+  @@unique([tenantId, estimateNumber])
+  @@index([tenantId, branchId, status, createdAt])
+  @@index([tenantId, customerId, createdAt])
+  @@index([tenantId, siteId, createdAt])
+  @@index([surveyId])
+}
+
+model EstimateRoom {
+  id             String       @id @default(uuid()) @db.Uuid
+  tenantId       String       @db.Uuid
+  estimateId     String       @db.Uuid
+  surveyRoomId   String?      @db.Uuid
+  roomName       String
+  grossArea      Decimal      @default(0) @db.Decimal(10, 4)
+  deductionArea  Decimal      @default(0) @db.Decimal(10, 4)
+  netArea        Decimal      @default(0) @db.Decimal(10, 4)
+  wastePercent   Decimal      @default(0) @db.Decimal(8, 4)
+  requiredArea   Decimal      @default(0) @db.Decimal(10, 4)
+  perimeter      Decimal      @default(0) @db.Decimal(10, 4)
+  notes          String?
+  displayOrder   Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  estimate       Estimate     @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  surveyRoom     SurveyRoom?  @relation(fields: [surveyRoomId], references: [id], onDelete: SetNull)
+  lines          EstimateLine[]
+
+  @@index([tenantId, estimateId, displayOrder])
+  @@index([surveyRoomId])
+}
+
+model EstimateLine {
+  id                     String                @id @default(uuid()) @db.Uuid
+  tenantId               String                @db.Uuid
+  estimateId             String                @db.Uuid
+  estimateRoomId         String?               @db.Uuid
+  lineType               EstimateLineType      @default(MATERIAL)
+  productId              String?               @db.Uuid
+  productVariantId       String?               @db.Uuid
+  supplierProductId      String?               @db.Uuid
+  supplierProductPriceId String?               @db.Uuid
+  description            String
+  quantity               Decimal               @db.Decimal(14, 4)
+  unit                   String
+  unitCost               Decimal               @default(0) @db.Decimal(14, 4)
+  unitSellPrice          Decimal               @default(0) @db.Decimal(14, 4)
+  costTotal              Decimal               @default(0) @db.Decimal(14, 4)
+  sellTotal              Decimal               @default(0) @db.Decimal(14, 4)
+  marginAmount           Decimal               @default(0) @db.Decimal(14, 4)
+  marginPercent          Decimal               @default(0) @db.Decimal(8, 4)
+  vatRate                Decimal               @default(0.2) @db.Decimal(8, 4)
+  vatAmount              Decimal               @default(0) @db.Decimal(14, 4)
+  lineTotal              Decimal               @default(0) @db.Decimal(14, 4)
+  priceSnapshot          Json?
+  overrideReason         String?
+  overrideActorUserId    String?               @db.Uuid
+  overrideAt             DateTime?
+  notes                  String?
+  displayOrder           Int                   @default(0)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  tenant                 Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  estimate               Estimate              @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  estimateRoom           EstimateRoom?         @relation(fields: [estimateRoomId], references: [id], onDelete: SetNull)
+  product                Product?              @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productVariant         ProductVariant?       @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  supplierProduct        SupplierProduct?      @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  supplierProductPrice   SupplierProductPrice? @relation(fields: [supplierProductPriceId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, estimateId, displayOrder])
+  @@index([estimateRoomId])
+  @@index([tenantId, productId])
+  @@index([productVariantId])
+  @@index([supplierProductId])
+  @@index([supplierProductPriceId])
+}
+
+model EstimateVersion {
+  id              String                @id @default(uuid()) @db.Uuid
+  tenantId        String                @db.Uuid
+  estimateId      String                @db.Uuid
+  versionNumber   Int
+  status          EstimateVersionStatus @default(CALCULATED)
+  currency        String                @default("GBP")
+  subtotal        Decimal               @default(0) @db.Decimal(14, 4)
+  materialCost    Decimal               @default(0) @db.Decimal(14, 4)
+  labourCost      Decimal               @default(0) @db.Decimal(14, 4)
+  accessoryCost   Decimal               @default(0) @db.Decimal(14, 4)
+  supplierCost    Decimal               @default(0) @db.Decimal(14, 4)
+  marginAmount    Decimal               @default(0) @db.Decimal(14, 4)
+  discountAmount  Decimal               @default(0) @db.Decimal(14, 4)
+  vatRate         Decimal               @default(0.2) @db.Decimal(8, 4)
+  vatAmount       Decimal               @default(0) @db.Decimal(14, 4)
+  grandTotal      Decimal               @default(0) @db.Decimal(14, 4)
+  grossProfit     Decimal               @default(0) @db.Decimal(14, 4)
+  grossMarginPercent Decimal            @default(0) @db.Decimal(8, 4)
+  snapshot        Json
+  createdById     String?               @db.Uuid
+  createdAt       DateTime              @default(now())
+  tenant          Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  estimate        Estimate              @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, estimateId, versionNumber])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, estimateId, versionNumber])
 }
 
 model PurchaseRequisitionLine {
@@ -1561,6 +1749,7 @@ model Product {
   supplierPriceImportRows     SupplierPriceImportRow[]  @relation("SupplierPriceImportMatchedProduct")
   purchaseRequisitionLines    PurchaseRequisitionLine[]
   purchaseOrderLines          PurchaseOrderLine[]
+  estimateLines               EstimateLine[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, sku])
@@ -1606,6 +1795,7 @@ model ProductVariant {
   supplierPriceImportRows  SupplierPriceImportRow[]  @relation("SupplierPriceImportMatchedVariant")
   purchaseRequisitionLines PurchaseRequisitionLine[]
   purchaseOrderLines       PurchaseOrderLine[]
+  estimateLines            EstimateLine[]
 
   @@unique([tenantId, sku])
   @@index([tenantId, productId, lifecycleStatus])

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { apiFetch, getSession } from "@/lib/api";
+import { getEstimatePermissions } from "@/lib/estimates";
 import { getProcurementPermissions } from "@/lib/procurement";
 
 // Reusable components
@@ -44,6 +45,7 @@ export default async function AppLayout({
   }>("/api/v1/tenants/current");
 
   const procurementPerms = getProcurementPermissions(session);
+  const estimatePerms = getEstimatePermissions(session);
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
@@ -92,6 +94,12 @@ export default async function AppLayout({
                 <NavItem href="/app/catalogue" label="Products" />
                 <NavItem href="/app/suppliers" label="Suppliers" />
               </NavGroup>
+
+              {estimatePerms.canRead && (
+                <NavGroup title="Sales">
+                  <NavItem href="/app/estimates" label="Estimates" />
+                </NavGroup>
+              )}
 
               {(procurementPerms.canViewRequisition || procurementPerms.canViewPo) && (
                 <NavGroup title="Procurement">

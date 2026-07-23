@@ -1,23 +1,27 @@
 import './helpers/test-env';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { prisma, recreateTestDatabase, resetDatabase } from './helpers/test-db';
-import { createIsolationFixtures } from './helpers/tenant-fixtures';
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
+import { disconnectDatabase, prisma, recreateTestDatabase, resetDatabase } from './helpers/test-db';
+import { createIsolationFixtures, type IsolationFixtureSet } from './helpers/tenant-fixtures';
 
-describe('Procurement DB Tests', () => {
+describe.sequential('Procurement DB Tests', () => {
+  let fixtures: IsolationFixtureSet;
+
   beforeAll(async () => {
     await recreateTestDatabase();
-  }, 30000);
+  }, 60000);
+
+  beforeEach(async () => {
+    await resetDatabase();
+    fixtures = await createIsolationFixtures();
+  }, 20000);
 
   afterAll(async () => {
-    await prisma.$disconnect();
+    await disconnectDatabase();
   });
 
   it('Cascades: Tenant deletion', async () => {
-    await resetDatabase();
-    const fixtures = await createIsolationFixtures();
-    
     // Create a Purchase Requisition
-    const req = await prisma.purchaseRequisition.create({
+    await prisma.purchaseRequisition.create({
       data: {
         tenantId: fixtures.tenantA.id,
         branchId: fixtures.branchA1.id,
@@ -32,10 +36,7 @@ describe('Procurement DB Tests', () => {
   });
   
   it('Cascades: Branch deletion', async () => {
-    await resetDatabase();
-    const fixtures = await createIsolationFixtures();
-    
-    const req = await prisma.purchaseRequisition.create({
+    await prisma.purchaseRequisition.create({
       data: {
         tenantId: fixtures.tenantA.id,
         branchId: fixtures.branchA1.id,
@@ -50,10 +51,7 @@ describe('Procurement DB Tests', () => {
   });
   
   it('Cascades: Supplier deletion', async () => {
-    await resetDatabase();
-    const fixtures = await createIsolationFixtures();
-    
-    const po = await prisma.purchaseOrder.create({
+    await prisma.purchaseOrder.create({
       data: {
         tenantId: fixtures.tenantA.id,
         branchId: fixtures.branchA1.id,
@@ -71,9 +69,6 @@ describe('Procurement DB Tests', () => {
   });
   
   it('Cascades: Product deletion', async () => {
-    await resetDatabase();
-    const fixtures = await createIsolationFixtures();
-    
     const req = await prisma.purchaseRequisition.create({
       data: {
         tenantId: fixtures.tenantA.id,
@@ -100,9 +95,6 @@ describe('Procurement DB Tests', () => {
   });
   
   it('Cascades: Variant deletion', async () => {
-    await resetDatabase();
-    const fixtures = await createIsolationFixtures();
-    
     const variant = await prisma.productVariant.create({
       data: {
         tenantId: fixtures.tenantA.id,
@@ -142,9 +134,6 @@ describe('Procurement DB Tests', () => {
   });
 
   it('Constraints: Unique Tenant/PO-Number', async () => {
-    await resetDatabase();
-    const fixtures = await createIsolationFixtures();
-
     await prisma.purchaseOrder.create({
       data: {
         tenantId: fixtures.tenantA.id,
@@ -171,9 +160,6 @@ describe('Procurement DB Tests', () => {
   });
   
   it('Constraints: Unique Tenant/PO/Version', async () => {
-    await resetDatabase();
-    const fixtures = await createIsolationFixtures();
-
     const po = await prisma.purchaseOrder.create({
       data: {
         tenantId: fixtures.tenantA.id,
@@ -210,9 +196,6 @@ describe('Procurement DB Tests', () => {
   });
 
   it('Concurrency: Concurrent Draft creation', async () => {
-    await resetDatabase();
-    const fixtures = await createIsolationFixtures();
-    
     const reqs = await Promise.all([
       prisma.purchaseRequisition.create({
         data: {
@@ -236,9 +219,6 @@ describe('Procurement DB Tests', () => {
   });
   
   it('Concurrency: Concurrent PO conversion', async () => {
-    await resetDatabase();
-    const fixtures = await createIsolationFixtures();
-
     const po1 = prisma.purchaseOrder.create({
       data: {
         tenantId: fixtures.tenantA.id,

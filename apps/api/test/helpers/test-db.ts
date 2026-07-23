@@ -9,6 +9,8 @@ const rootDir = path.resolve(currentDir, "../../../..");
 const dbPackageDir = path.resolve(rootDir, "packages/db");
 
 const pnpmCmd = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+let testDatabaseBootstrapPromise: Promise<void> | null = null;
+let testDatabaseBootstrapped = false;
 
 export const prisma = new PrismaClient({
   datasources: {
@@ -24,7 +26,7 @@ const getAdminConnectionString = (databaseUrl: string) => {
   return url.toString();
 };
 
-export const recreateTestDatabase = async () => {
+const recreateTestDatabaseOnce = async () => {
   const { databaseUrl, testDbName } = ensureTestEnv({
     requireExplicitDatabaseUrl: true,
   });
@@ -55,6 +57,32 @@ export const recreateTestDatabase = async () => {
       DIRECT_URL: databaseUrl,
     },
   });
+};
+
+export const recreateTestDatabase = async (options?: { force?: boolean }) => {
+  const force = options?.force ?? false;
+  if (force) {
+    testDatabaseBootstrapPromise = null;
+    testDatabaseBootstrapped = false;
+  }
+
+  if (testDatabaseBootstrapped) {
+    return;
+  }
+
+  if (!testDatabaseBootstrapPromise) {
+    testDatabaseBootstrapPromise = recreateTestDatabaseOnce()
+      .then(() => {
+        testDatabaseBootstrapped = true;
+      })
+      .catch((error) => {
+        testDatabaseBootstrapPromise = null;
+        testDatabaseBootstrapped = false;
+        throw error;
+      });
+  }
+
+  await testDatabaseBootstrapPromise;
 };
 
 export const resetDatabase = async () => {

@@ -237,17 +237,18 @@ const assignRolePermissions = async (
   keys: readonly string[],
 ) => {
   await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
-  for (const key of keys) {
-    const permission = permissionByKey.get(key);
-    if (!permission) {
-      continue;
-    }
+  const rolePermissionRows = keys
+    .map((key) => permissionByKey.get(key))
+    .filter((permission): permission is Permission => Boolean(permission))
+    .map((permission) => ({
+      roleId: role.id,
+      permissionId: permission.id,
+    }));
 
-    await prisma.rolePermission.create({
-      data: {
-        roleId: role.id,
-        permissionId: permission.id,
-      },
+  if (rolePermissionRows.length > 0) {
+    await prisma.rolePermission.createMany({
+      data: rolePermissionRows,
+      skipDuplicates: true,
     });
   }
 };
@@ -344,8 +345,13 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
   );
   await assignRolePermissions(staffRole, permissionByKey, rolePermissions.STAFF);
 
-  const subscriptionPlan = await prisma.subscriptionPlan.create({
-    data: {
+  const subscriptionPlan = await prisma.subscriptionPlan.upsert({
+    where: { key: "growth" },
+    update: {
+      name: "Growth",
+      description: "Growth plan",
+    },
+    create: {
       key: "growth",
       name: "Growth",
       description: "Growth plan",

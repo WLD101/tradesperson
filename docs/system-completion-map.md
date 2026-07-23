@@ -15,7 +15,7 @@ Created on July 23, 2026 as the single working completion snapshot for the ERP f
 | Product catalogue | Functional but incomplete | 88 | 84 | 55 | 90 | 85 | Catalogue is not yet fully consumed by estimating | Reuse catalogue rules in estimate material takeoff |
 | Suppliers | Functional but incomplete | 90 | 88 | 55 | 95 | 89 | Supplier data is strong but not yet tied into finance/AP | Connect supplier commitments into finance workflows |
 | Supplier pricing | Functional but incomplete | 92 | 88 | 70 | 95 | 90 | Pricing is operational but downstream estimate and margin usage is missing | Reuse current supplier prices in estimating and procurement cost decisions |
-| Procurement | Functional but incomplete | 95 | 90 | 75 | 100 | 92 | Workflow is working end to end, but route polish and broader operational reporting remain | Start Estimate and Quote sprint using the now-working requisition-to-PO foundation |
+| Procurement | Closure verified | 100 | 100 | 100 | 100 | 100 | Goods Receipt, inventory movement, AP, and operational reporting are deferred outside Phase D | Start Estimate and Quote sprint using the now-working requisition-to-PO foundation |
 | Estimates | Stub | 20 | 5 | 0 | 0 | 10 | No completed estimate workflow exists yet | Build estimate list, create, detail, edit, and survey measurement import |
 | Quotes | Not started | 10 | 0 | 0 | 0 | 5 | Quote generation and approval flow are absent | Build quote generation from approved estimates |
 | Jobs | Not started | 10 | 0 | 0 | 0 | 5 | No operational job delivery workflow exists yet | Create job list/detail and quote-to-job conversion |
@@ -30,5 +30,5 @@ Created on July 23, 2026 as the single working completion snapshot for the ERP f
 
 ## Current focus
 
-- Critical workflow status: partially operational through procurement, but estimate, quote, job, finance, and aftercare stages are still missing.
-- Active sprint target: move from Procurement into Estimate and Quote without reopening completed procurement work unless regressions appear.
+- Critical workflow status: operational through procurement Phase D, but estimate, quote, job, finance, and aftercare stages are still missing.
+- Active sprint target: begin Estimate and Quote on top of the closed procurement foundation.

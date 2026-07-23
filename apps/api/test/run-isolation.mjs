@@ -1,5 +1,20 @@
 import { spawn } from "node:child_process";
+import { access, readdir, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import net from "node:net";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+const prismaClientPackageDir = path.dirname(
+  require.resolve("@prisma/client/package.json"),
+);
+const prismaClientDir = path.resolve(
+  prismaClientPackageDir,
+  "../.prisma/client",
+);
 
 function getAvailablePort() {
   return new Promise((resolve, reject) => {
@@ -37,6 +52,33 @@ function waitForHealth(url, maxRetries = 120, intervalMs = 500) {
       }
     }, intervalMs);
   });
+}
+
+async function prismaClientIsReady() {
+  try {
+    await access(path.join(prismaClientDir, "index.js"));
+    await access(path.join(prismaClientDir, "query_engine-windows.dll.node"));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function removeStalePrismaTempFiles() {
+  try {
+    const entries = await readdir(prismaClientDir, { withFileTypes: true });
+    await Promise.all(
+      entries
+        .filter(
+          (entry) =>
+            entry.isFile() &&
+            entry.name.startsWith("query_engine-windows.dll.node.tmp"),
+        )
+        .map((entry) => rm(path.join(prismaClientDir, entry.name), { force: true })),
+    );
+  } catch {
+    // Best-effort cleanup only.
+  }
 }
 
 async function main() {
@@ -90,23 +132,28 @@ async function main() {
       });
     });
 
-    console.log(`[runner] Generating prisma client (with retry)...`);
-    let generated = false;
-    let generateRetries = 0;
-    while (!generated && generateRetries < 5) {
-      const dbGen = spawn("pnpm", ["--filter", "@tradesperson/db", "exec", "prisma", "generate"], { stdio: "inherit", shell: true, env: apiEnv });
-      const code = await new Promise((res) => {
-        dbGen.on("close", res);
-      });
-      if (code === 0) {
-        generated = true;
-      } else {
-        generateRetries++;
-        console.warn(`[runner] Prisma generate failed (attempt ${generateRetries}/5). Retrying in 2 seconds...`);
-        await new Promise(r => setTimeout(r, 2000));
+    await removeStalePrismaTempFiles();
+    if (await prismaClientIsReady()) {
+      console.log(`[runner] Reusing existing prisma client; skipping generate.`);
+    } else {
+      console.log(`[runner] Generating prisma client (with retry)...`);
+      let generated = false;
+      let generateRetries = 0;
+      while (!generated && generateRetries < 5) {
+        const dbGen = spawn("pnpm", ["--filter", "@tradesperson/db", "exec", "prisma", "generate"], { stdio: "inherit", shell: true, env: apiEnv });
+        const code = await new Promise((res) => {
+          dbGen.on("close", res);
+        });
+        if (code === 0) {
+          generated = true;
+        } else {
+          generateRetries++;
+          console.warn(`[runner] Prisma generate failed (attempt ${generateRetries}/5). Retrying in 2 seconds...`);
+          await new Promise(r => setTimeout(r, 2000));
+        }
       }
+      if (!generated) throw new Error("Database generate failed after 5 attempts");
     }
-    if (!generated) throw new Error("Database generate failed after 5 attempts");
 
     console.log(`[runner] Starting API...`);
     const entrypoint = "dist/apps/api/src/main.js";

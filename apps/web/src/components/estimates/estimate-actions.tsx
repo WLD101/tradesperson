@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { markEstimateReadyForQuote, recalculateEstimate } from "@/lib/estimates-client";
+import { createQuoteFromEstimate } from "@/lib/quotes-client";
 
 export function EstimateActions({
   estimateId,
@@ -11,24 +12,31 @@ export function EstimateActions({
   canWrite,
   canCalculate,
   canApprove,
+  canCreateQuote,
 }: {
   estimateId: string;
   status: string;
   canWrite: boolean;
   canCalculate: boolean;
   canApprove: boolean;
+  canCreateQuote: boolean;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const editable = ["DRAFT", "CALCULATED"].includes(status);
 
-  const run = async (action: "recalculate" | "ready") => {
+  const run = async (action: "recalculate" | "ready" | "quote") => {
     setError(null);
     setPending(action);
     try {
       if (action === "recalculate") await recalculateEstimate(estimateId);
       if (action === "ready") await markEstimateReadyForQuote(estimateId);
+      if (action === "quote") {
+        const quote = await createQuoteFromEstimate(estimateId);
+        router.push(`/app/quotes/${quote.id}`);
+        return;
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Action failed.");
@@ -66,6 +74,16 @@ export function EstimateActions({
           className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
         >
           {pending === "ready" ? "Marking..." : "Ready for Quote"}
+        </button>
+      ) : null}
+      {canCreateQuote && status === "READY_FOR_QUOTE" ? (
+        <button
+          type="button"
+          disabled={pending === "quote"}
+          onClick={() => run("quote")}
+          className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        >
+          {pending === "quote" ? "Creating..." : "Create Quote"}
         </button>
       ) : null}
     </div>

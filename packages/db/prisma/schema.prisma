@@ -310,6 +310,24 @@ enum EstimateVersionStatus {
   ARCHIVED
 }
 
+enum QuoteStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+  CONVERTED
+}
+
+enum QuoteVersionStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
 model User {
   id                String                 @id @default(uuid()) @db.Uuid
   email             String                 @unique
@@ -424,6 +442,9 @@ model Tenant {
   estimateRooms              EstimateRoom[]
   estimateLines              EstimateLine[]
   estimateVersions           EstimateVersion[]
+  quotes                     Quote[]
+  quoteLines                 QuoteLine[]
+  quoteVersions              QuoteVersion[]
 }
 
 model TenantMembership {
@@ -518,6 +539,7 @@ model Branch {
   purchaseRequisitions PurchaseRequisition[]
   purchaseOrders       PurchaseOrder[]
   estimates            Estimate[]
+  quotes               Quote[]
 
   @@unique([tenantId, branchCode])
   @@index([tenantId, status])
@@ -575,6 +597,7 @@ model Customer {
   convertedLeads Lead[]       @relation("LeadConvertedCustomer")
   surveys        Survey[]
   estimates      Estimate[]
+  quotes         Quote[]
 
   @@index([tenantId, displayName])
   @@index([branchId])
@@ -621,6 +644,7 @@ model Site {
   updatedBy      User?    @relation("SiteUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   surveys        Survey[]
   estimates      Estimate[]
+  quotes         Quote[]
 
   @@index([tenantId, customerId, createdAt])
   @@index([branchId])
@@ -1400,6 +1424,7 @@ model Estimate {
   rooms           EstimateRoom[]
   lines           EstimateLine[]
   versions        EstimateVersion[]
+  quotes          Quote[]
 
   @@unique([tenantId, estimateNumber])
   @@index([tenantId, branchId, status, createdAt])
@@ -1470,6 +1495,7 @@ model EstimateLine {
   productVariant         ProductVariant?       @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
   supplierProduct        SupplierProduct?      @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
   supplierProductPrice   SupplierProductPrice? @relation(fields: [supplierProductPriceId], references: [id], onDelete: SetNull)
+  quoteLines             QuoteLine[]
 
   @@index([tenantId, estimateId, displayOrder])
   @@index([estimateRoomId])
@@ -1507,6 +1533,104 @@ model EstimateVersion {
   @@unique([tenantId, estimateId, versionNumber])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, estimateId, versionNumber])
+}
+
+model Quote {
+  id                 String       @id @default(uuid()) @db.Uuid
+  tenantId           String       @db.Uuid
+  branchId           String?      @db.Uuid
+  customerId         String       @db.Uuid
+  siteId             String       @db.Uuid
+  estimateId         String?      @db.Uuid
+  quoteNumber        String
+  status             QuoteStatus  @default(DRAFT)
+  title              String?
+  currency           String       @default("GBP")
+  subtotal           Decimal      @default(0) @db.Decimal(14, 4)
+  discountAmount     Decimal      @default(0) @db.Decimal(14, 4)
+  vatRate            Decimal      @default(0.2) @db.Decimal(8, 4)
+  vatAmount          Decimal      @default(0) @db.Decimal(14, 4)
+  grandTotal         Decimal      @default(0) @db.Decimal(14, 4)
+  depositRequired    Decimal      @default(0) @db.Decimal(14, 4)
+  depositPaid        Decimal      @default(0) @db.Decimal(14, 4)
+  validUntil         DateTime?
+  terms              String?
+  customerNotes      String?
+  internalNotes      String?
+  createdById        String?      @db.Uuid
+  updatedById        String?      @db.Uuid
+  sentById           String?      @db.Uuid
+  approvedById       String?      @db.Uuid
+  rejectedById       String?      @db.Uuid
+  sentAt             DateTime?
+  approvedAt         DateTime?
+  rejectedAt         DateTime?
+  cancelledAt        DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  tenant             Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch             Branch?      @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer           Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  site               Site         @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  estimate           Estimate?    @relation(fields: [estimateId], references: [id], onDelete: SetNull)
+  lines              QuoteLine[]
+  versions           QuoteVersion[]
+
+  @@unique([tenantId, quoteNumber])
+  @@index([tenantId, branchId, status, createdAt])
+  @@index([tenantId, customerId, createdAt])
+  @@index([tenantId, siteId, createdAt])
+  @@index([estimateId])
+}
+
+model QuoteLine {
+  id                   String           @id @default(uuid()) @db.Uuid
+  tenantId             String           @db.Uuid
+  quoteId              String           @db.Uuid
+  sourceEstimateLineId String?          @db.Uuid
+  lineType             EstimateLineType @default(MATERIAL)
+  description          String
+  quantity             Decimal          @db.Decimal(14, 4)
+  unit                 String
+  unitSellPrice        Decimal          @default(0) @db.Decimal(14, 4)
+  sellTotal            Decimal          @default(0) @db.Decimal(14, 4)
+  vatRate              Decimal          @default(0.2) @db.Decimal(8, 4)
+  vatAmount            Decimal          @default(0) @db.Decimal(14, 4)
+  lineTotal            Decimal          @default(0) @db.Decimal(14, 4)
+  notes                String?
+  displayOrder         Int              @default(0)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  tenant               Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  quote                Quote            @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  sourceEstimateLine   EstimateLine?    @relation(fields: [sourceEstimateLineId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, quoteId, displayOrder])
+  @@index([sourceEstimateLineId])
+}
+
+model QuoteVersion {
+  id             String             @id @default(uuid()) @db.Uuid
+  tenantId       String             @db.Uuid
+  quoteId        String             @db.Uuid
+  versionNumber  Int
+  status         QuoteVersionStatus @default(DRAFT)
+  currency       String             @default("GBP")
+  subtotal       Decimal            @default(0) @db.Decimal(14, 4)
+  discountAmount Decimal            @default(0) @db.Decimal(14, 4)
+  vatRate        Decimal            @default(0.2) @db.Decimal(8, 4)
+  vatAmount      Decimal            @default(0) @db.Decimal(14, 4)
+  grandTotal     Decimal            @default(0) @db.Decimal(14, 4)
+  depositRequired Decimal           @default(0) @db.Decimal(14, 4)
+  snapshot       Json
+  createdById    String?            @db.Uuid
+  createdAt      DateTime           @default(now())
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  quote          Quote              @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, quoteId, versionNumber])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, quoteId, versionNumber])
 }
 
 model PurchaseRequisitionLine {

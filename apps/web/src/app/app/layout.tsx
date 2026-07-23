@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { apiFetch, getSession } from "@/lib/api";
 import { getEstimatePermissions } from "@/lib/estimates";
 import { getProcurementPermissions } from "@/lib/procurement";
+import { getQuotePermissions } from "@/lib/quotes";
 
 // Reusable components
 function NavGroup({ title, children }: { title: string, children: React.ReactNode }) {
@@ -46,6 +47,7 @@ export default async function AppLayout({
 
   const procurementPerms = getProcurementPermissions(session);
   const estimatePerms = getEstimatePermissions(session);
+  const quotePerms = getQuotePermissions(session);
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
@@ -95,9 +97,10 @@ export default async function AppLayout({
                 <NavItem href="/app/suppliers" label="Suppliers" />
               </NavGroup>
 
-              {estimatePerms.canRead && (
+              {(estimatePerms.canRead || quotePerms.canRead) && (
                 <NavGroup title="Sales">
-                  <NavItem href="/app/estimates" label="Estimates" />
+                  {estimatePerms.canRead && <NavItem href="/app/estimates" label="Estimates" />}
+                  {quotePerms.canRead && <NavItem href="/app/quotes" label="Quotes" />}
                 </NavGroup>
               )}
 

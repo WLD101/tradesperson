@@ -12,6 +12,7 @@ import {
 } from "@/components/shared";
 import { getSession } from "@/lib/api";
 import { getEstimate, getEstimatePermissions } from "@/lib/estimates";
+import { getQuotePermissions } from "@/lib/quotes";
 
 function statusColor(status: string) {
   if (status === "DRAFT") return "slate" as const;
@@ -29,6 +30,7 @@ export default async function EstimateDetailPage({
   const session = await getSession();
   if (!session) redirect("/sign-in");
   const perms = getEstimatePermissions(session);
+  const quotePerms = getQuotePermissions(session);
   if (!perms.canRead) redirect("/app/dashboard");
 
   const { id } = await params;
@@ -55,6 +57,7 @@ export default async function EstimateDetailPage({
               canWrite={perms.canWrite}
               canCalculate={perms.canCalculate}
               canApprove={perms.canApprove}
+              canCreateQuote={quotePerms.canCreate}
             />
           </div>
         }

@@ -168,7 +168,6 @@ const PURCHASE_ORDER_SELECT: any = {
   },
   versions: {
     orderBy: [{ versionNumber: "desc" }],
-    take: 1,
     include: {
       lines: {
         orderBy: [{ displayOrder: "asc" }],
@@ -896,7 +895,7 @@ export class ProcurementService {
 
   async createNewVersion(session: TenantSession, purchaseOrderId: string) {
     const existing = await this.ensurePurchaseOrder(session, purchaseOrderId, {
-      include: { versions: { include: { lines: true }, orderBy: { versionNumber: "desc" }, take: 1 } },
+      include: { versions: { include: { lines: true }, orderBy: { versionNumber: "desc" } } },
     });
 
     if ((!existing.versions || existing.versions.length === 0)) {

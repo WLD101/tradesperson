@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getSession } from "@/lib/api";
+import { apiFetch, getSession } from "@/lib/api";
 import { getProcurementPermissions, getRequisition } from "@/lib/procurement";
 import { RequisitionActions } from "@/components/procurement/requisition-actions";
 import { 
@@ -13,6 +13,7 @@ import {
   Money,
   ActivityTimeline
 } from "@/components/shared";
+import type { SupplierListResponse } from "@/lib/suppliers";
 
 export default async function RequisitionDetailPage({
   params,
@@ -39,6 +40,7 @@ export default async function RequisitionDetailPage({
     }
     throw err;
   }
+  const suppliers = await apiFetch<SupplierListResponse>("/api/v1/suppliers?pageSize=100&sort=nameAsc");
 
   const getStatusColor = (s: string) => {
     if (s === "DRAFT") return "slate";
@@ -67,6 +69,11 @@ export default async function RequisitionDetailPage({
             <StatusBadge status={requisition.status} color={getStatusColor(requisition.status)} />
             <RequisitionActions
               requisition={requisition}
+              suppliers={suppliers.items.map((supplier) => ({
+                id: supplier.id,
+                name: supplier.tradingName || supplier.legalName,
+                supplierCode: supplier.supplierCode,
+              }))}
               permissions={{
                 canManage: perms.canManageRequisition,
                 canApprove: perms.canApproveRequisition,
@@ -121,7 +128,11 @@ export default async function RequisitionDetailPage({
                       <td className="px-4 py-3">
                         <p className="font-medium text-slate-900">{line.description}</p>
                         {line.product && <p className="text-xs text-slate-500 mt-1">Product: {line.product.name} ({line.product.sku})</p>}
-                        {line.preferredSupplier && <p className="text-xs text-slate-500 mt-0.5">Pref. Supplier: {line.preferredSupplier.name}</p>}
+                        {line.preferredSupplier && (
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            Pref. Supplier: {line.preferredSupplier.tradingName || line.preferredSupplier.legalName}
+                          </p>
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">{requested} {line.unit}</td>
                       <td className="px-4 py-3 whitespace-nowrap">{ordered} {line.unit}</td>

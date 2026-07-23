@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/api";
+import { apiFetch, getSession } from "@/lib/api";
 import { getProcurementPermissions, getRequisitions } from "@/lib/procurement";
 import { PageHeader, Breadcrumbs, StatusBadge, DataTable, FilterBar, EmptyState, DateDisplay } from "@/components/shared";
 
@@ -30,18 +30,29 @@ export default async function RequisitionsPage({
   if (branchId) apiParams.branchId = branchId;
   if (search) apiParams.search = search;
 
-  const response = await getRequisitions(apiParams).catch(() => ({
-    items: [],
-    total: 0,
-    page: 1,
-    pageSize: 20,
-    totalPages: 1,
-  }));
+  const [branches, responseResult] = await Promise.all([
+    apiFetch<Array<{ id: string; name: string }>>("/api/v1/branches").catch(() => []),
+    getRequisitions(apiParams)
+      .then((data) => ({ data, error: null as string | null }))
+      .catch((err: Error) => ({
+        data: {
+          items: [],
+          total: 0,
+          page: 1,
+          pageSize: 20,
+          totalPages: 1,
+        },
+        error: err.message || "Unable to load requisitions right now.",
+      })),
+  ]);
+  const response = responseResult.data;
+  const loadError = responseResult.error;
 
   const getStatusColor = (s: string) => {
     if (s === "DRAFT") return "slate";
     if (s === "SUBMITTED") return "amber";
     if (s === "APPROVED") return "green";
+    if (s === "PARTIALLY_ORDERED") return "blue";
     if (s === "ORDERED") return "blue";
     if (s === "REJECTED" || s === "CANCELLED") return "red";
     return "slate";
@@ -97,10 +108,11 @@ export default async function RequisitionsPage({
               defaultValue={branchId ?? ""}
             >
               <option value="">All Branches</option>
-              {session.memberships
-                .find((m) => m.tenantId === session.activeTenantId)
-                ?.permissions.includes("admin") && <option value="unfiltered">Show All</option>
-              }
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
             </select>
             <button
               type="submit"
@@ -110,6 +122,12 @@ export default async function RequisitionsPage({
             </button>
           </form>
         </FilterBar>
+
+        {loadError ? (
+          <div className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {loadError}
+          </div>
+        ) : null}
 
         {response.items.length > 0 ? (
           <>

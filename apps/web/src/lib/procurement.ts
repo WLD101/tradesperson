@@ -2,9 +2,29 @@ import type { SessionContext } from "@tradesperson/types";
 import { apiFetch } from "./api";
 
 // Enums
-export type PurchaseRequisitionStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "ORDERED" | "CANCELLED";
-export type PurchaseOrderStatus = "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "ISSUED" | "CANCELLED";
-export type PurchaseOrderVersionStatus = "DRAFT" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "ISSUED" | "CANCELLED";
+export type PurchaseRequisitionStatus =
+  | "DRAFT"
+  | "SUBMITTED"
+  | "APPROVED"
+  | "REJECTED"
+  | "PARTIALLY_ORDERED"
+  | "ORDERED"
+  | "CANCELLED";
+export type PurchaseOrderStatus =
+  | "DRAFT"
+  | "PENDING_APPROVAL"
+  | "APPROVED"
+  | "REJECTED"
+  | "ISSUED"
+  | "ACKNOWLEDGED"
+  | "CANCELLED";
+export type PurchaseOrderVersionStatus =
+  | "DRAFT"
+  | "PENDING_APPROVAL"
+  | "APPROVED"
+  | "REJECTED"
+  | "ISSUED"
+  | "CANCELLED";
 export type SupplierAcknowledgementStatus = "PENDING" | "ACCEPTED" | "ACCEPTED_WITH_CHANGES" | "REJECTED";
 export type PurchaseOrderDeliveryPlanStatus = "PLANNED" | "CONFIRMED" | "DELAYED" | "CANCELLED" | "COMPLETED";
 
@@ -25,9 +45,21 @@ export type PurchaseRequisitionLine = {
   notes: string | null;
   displayOrder: number;
   product?: { id: string; name: string; sku: string };
-  variant?: { id: string; name: string; sku: string } | null;
-  supplierProduct?: { id: string; supplierSku: string } | null;
-  preferredSupplier?: { id: string; name: string } | null;
+  productVariant?: { id: string; name: string; sku: string } | null;
+  supplierProduct?: { id: string; supplierSku: string; supplierDescription?: string | null } | null;
+  preferredSupplier?: { id: string; legalName: string; tradingName: string | null } | null;
+  purchaseOrderLines?: Array<{
+    id: string;
+    quantity: string;
+    purchaseOrderVersion: {
+      id: string;
+      purchaseOrder: {
+        id: string;
+        purchaseOrderNumber: string;
+        status: PurchaseOrderStatus;
+      };
+    };
+  }>;
 };
 
 export type PurchaseRequisition = {
@@ -72,6 +104,15 @@ export type PurchaseOrderLine = {
   expectedDate: string | null;
   notes: string | null;
   displayOrder: number;
+  product?: { id: string; name: string; sku: string } | null;
+  productVariant?: { id: string; name: string; sku: string } | null;
+  supplierProduct?: { id: string; supplierSku: string; supplierDescription: string | null } | null;
+  purchaseRequisitionLine?: {
+    id: string;
+    purchaseRequisitionId: string;
+    requestedQuantity: string;
+    orderedQuantity: string;
+  } | null;
 };
 
 export type PurchaseOrderVersion = {
@@ -79,6 +120,7 @@ export type PurchaseOrderVersion = {
   purchaseOrderId: string;
   versionNumber: number;
   status: PurchaseOrderVersionStatus;
+  createdAt: string;
   currency: string;
   subtotal: string;
   taxAmount: string;
@@ -94,6 +136,7 @@ export type PurchaseOrderVersion = {
   approvedById: string | null;
   issuedById: string | null;
   approvedAt: string | null;
+  issuedAt: string | null;
   lines: PurchaseOrderLine[];
 };
 
@@ -128,6 +171,8 @@ export type PurchaseOrder = {
   purchaseRequisitionId: string | null;
   purchaseOrderNumber: string;
   status: PurchaseOrderStatus;
+  createdAt: string;
+  updatedAt: string;
   currency: string;
   subtotal: string;
   taxAmount: string;
@@ -141,8 +186,22 @@ export type PurchaseOrder = {
   createdById: string | null;
   approvedById: string | null;
   issuedById: string | null;
-  supplier: { id: string; name: string };
+  approvedAt?: string | null;
+  issuedAt?: string | null;
+  cancelledAt?: string | null;
+  supplier: {
+    id: string;
+    legalName: string;
+    tradingName: string | null;
+    supplierCode?: string;
+  };
   branch: { id: string; name: string };
+  purchaseRequisition?: {
+    id: string;
+    requisitionNumber: string;
+    status: PurchaseRequisitionStatus;
+    branchId: string;
+  } | null;
   versions: PurchaseOrderVersion[];
   acknowledgements: SupplierAcknowledgement[];
   deliveryPlans: PurchaseOrderDeliveryPlan[];
@@ -184,11 +243,11 @@ export async function getRequisitions(params?: RequisitionListParams) {
   if (params?.search) query.set("search", params.search);
 
   const qs = query.toString();
-  return apiFetch<PaginatedList<PurchaseRequisition>>(`/api/v1/procurement/requisitions${qs ? `?${qs}` : ""}`);
+  return apiFetch<PaginatedList<PurchaseRequisition>>(`/api/v1/purchase-requisitions${qs ? `?${qs}` : ""}`);
 }
 
 export async function getRequisition(id: string) {
-  return apiFetch<PurchaseRequisition>(`/api/v1/procurement/requisitions/${id}`);
+  return apiFetch<PurchaseRequisition>(`/api/v1/purchase-requisitions/${id}`);
 }
 
 export async function getPurchaseOrders(params?: PurchaseOrderListParams) {
@@ -201,11 +260,15 @@ export async function getPurchaseOrders(params?: PurchaseOrderListParams) {
   if (params?.search) query.set("search", params.search);
 
   const qs = query.toString();
-  return apiFetch<PaginatedList<PurchaseOrder>>(`/api/v1/procurement/purchase-orders${qs ? `?${qs}` : ""}`);
+  return apiFetch<PaginatedList<PurchaseOrder>>(`/api/v1/purchase-orders${qs ? `?${qs}` : ""}`);
 }
 
 export async function getPurchaseOrder(id: string) {
-  return apiFetch<PurchaseOrder>(`/api/v1/procurement/purchase-orders/${id}`);
+  return apiFetch<PurchaseOrder>(`/api/v1/purchase-orders/${id}`);
+}
+
+export async function getPurchaseOrderPrint(id: string) {
+  return apiFetch<PurchaseOrder>(`/api/v1/purchase-orders/${id}/print`);
 }
 
 export function getProcurementPermissions(session: SessionContext | null) {

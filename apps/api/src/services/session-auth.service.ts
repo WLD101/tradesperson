@@ -172,12 +172,17 @@ export class SessionAuthService {
   }
 
   private writeCookie(res: Response, value: string) {
+    const cookieDomain =
+      this.env.COOKIE_DOMAIN && this.env.COOKIE_DOMAIN !== "localhost"
+        ? this.env.COOKIE_DOMAIN
+        : undefined;
+
     res.cookie(SESSION_COOKIE_NAME, value, {
       httpOnly: true,
       sameSite: "lax",
       secure: this.env.NODE_ENV === "production",
       path: "/",
-      domain: this.env.COOKIE_DOMAIN,
+      ...(cookieDomain ? { domain: cookieDomain } : {}),
     });
   }
 

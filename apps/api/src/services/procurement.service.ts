@@ -6,6 +6,7 @@ import {
 import { hasPermission } from "../../../../packages/auth/src";
 import {
   Prisma,
+  MaterialRequirementStatus,
   PurchaseOrderDeliveryPlanStatus,
   PurchaseOrderStatus,
   PurchaseOrderVersionStatus,
@@ -1436,6 +1437,19 @@ export class ProcurementService {
           },
         },
       });
+      const requirement = await tx.materialRequirement.findUnique({
+        where: { purchaseRequisitionLineId: line.purchaseRequisitionLineId },
+      });
+      if (requirement) {
+        const orderedQuantity = this.money(requirement.orderedQuantity).plus(line.quantity);
+        const status = orderedQuantity.greaterThanOrEqualTo(this.money(requirement.requiredQuantity))
+          ? MaterialRequirementStatus.ORDERED
+          : MaterialRequirementStatus.PARTIALLY_ORDERED;
+        await tx.materialRequirement.update({
+          where: { id: requirement.id },
+          data: { orderedQuantity, status },
+        });
+      }
     }
 
     const requisitionLines = await tx.purchaseRequisitionLine.findMany({

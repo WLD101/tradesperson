@@ -36,7 +36,13 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
         actions={
           <div className="flex items-center gap-3">
             <StatusBadge status={quote.status} color={statusColor(quote.status)} />
-            <QuoteActions quoteId={quote.id} status={quote.status} canSend={perms.canSend} canApprove={perms.canApprove} />
+            <QuoteActions
+              quoteId={quote.id}
+              status={quote.status}
+              canSend={perms.canSend}
+              canApprove={perms.canApprove}
+              canConvert={perms.canConvert}
+            />
           </div>
         }
       />

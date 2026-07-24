@@ -26,6 +26,8 @@ const quotePermissionKeys = [
   "quote:convert",
 ] as const;
 
+const jobPermissionKeys = ["job:read", "job:create", "job:write"] as const;
+
 const permissions = [
   ["settings:manage", "Administration", "Manage tenant business settings"],
   ["branches:manage", "Administration", "Create and edit branches"],
@@ -113,6 +115,9 @@ const permissions = [
   ["quote:send", "Quotes", "Mark quotes as sent to customers"],
   ["quote:approve", "Quotes", "Approve or reject customer quotes"],
   ["quote:convert", "Quotes", "Convert approved quotes to jobs"],
+  ["job:read", "Jobs", "View converted jobs"],
+  ["job:create", "Jobs", "Create jobs from approved quotes"],
+  ["job:write", "Jobs", "Manage draft and scheduled jobs"],
   ["leads:view", "CRM", "View leads"],
   ["leads:manage", "CRM", "Create and update leads"],
   ["customers:view", "CRM", "View customers"],
@@ -168,6 +173,7 @@ const tenantRoles = {
     "procurement:cost:override",
     ...estimatePermissionKeys,
     ...quotePermissionKeys,
+    ...jobPermissionKeys,
     "leads:view",
     "leads:manage",
     "customers:view",
@@ -216,6 +222,7 @@ const tenantRoles = {
     "procurement:cost:override",
     ...estimatePermissionKeys,
     ...quotePermissionKeys,
+    ...jobPermissionKeys,
     "leads:view",
     "leads:manage",
     "customers:view",
@@ -231,6 +238,7 @@ const tenantRoles = {
     "suppliers:view",
     "estimate:read",
     "quote:read",
+    "job:read",
     "leads:view",
     "customers:view",
     "properties:view",
@@ -260,6 +268,7 @@ const tenantRoles = {
     "procurement:cost:override",
     ...estimatePermissionKeys,
     ...quotePermissionKeys,
+    ...jobPermissionKeys,
   ],
   PROCUREMENT_STAFF: [
     "branches:view",
@@ -284,6 +293,9 @@ const tenantRoles = {
     "quote:create",
     "quote:write",
     "quote:send",
+    "job:read",
+    "job:create",
+    "job:write",
   ],
   VIEWER: [
     "branches:view",
@@ -299,6 +311,7 @@ const tenantRoles = {
     "procurement:order:read",
     "estimate:read",
     "quote:read",
+    "job:read",
     "leads:view",
     "customers:view",
     "properties:view",
@@ -1997,6 +2010,7 @@ async function main() {
     },
   });
 
+  await prisma.job.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.quoteVersion.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.quoteLine.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.quote.deleteMany({ where: { tenantId: tenant.id } });
@@ -2292,7 +2306,7 @@ async function main() {
       siteId: demoSite.id,
       estimateId: calculatedEstimate.id,
       quoteNumber: "QUO-2026-000001",
-      status: "SENT",
+      status: "CONVERTED",
       title: "Quote for Johnson lounge and hallway carpet refit",
       currency: calculatedEstimate.currency,
       subtotal: calculatedEstimate.subtotal,
@@ -2301,6 +2315,7 @@ async function main() {
       vatAmount: calculatedEstimate.vatAmount,
       grandTotal: calculatedEstimate.grandTotal,
       depositRequired: money(calculatedEstimate.grandTotal).mul("0.25"),
+      depositPaid: money(calculatedEstimate.grandTotal).mul("0.25"),
       validUntil: new Date("2026-08-31T23:59:59.000Z"),
       terms: "25% deposit to secure installation slot. Balance due on completion.",
       customerNotes: calculatedEstimate.customerNotes,
@@ -2308,7 +2323,9 @@ async function main() {
       createdById: owner.id,
       updatedById: owner.id,
       sentById: manager.id,
+      approvedById: owner.id,
       sentAt: new Date("2026-07-23T10:00:00.000Z"),
+      approvedAt: new Date("2026-07-23T11:00:00.000Z"),
       lines: {
         create: calculatedEstimate.lines.map((line, index) => ({
           tenantId: tenant.id,
@@ -2335,7 +2352,7 @@ async function main() {
       tenantId: tenant.id,
       quoteId: seededQuote.id,
       versionNumber: 1,
-      status: "SENT",
+      status: "APPROVED",
       currency: seededQuote.currency,
       subtotal: seededQuote.subtotal,
       discountAmount: seededQuote.discountAmount,
@@ -2351,6 +2368,34 @@ async function main() {
   await prisma.numberSequence.update({
     where: { tenantId_key: { tenantId: tenant.id, key: "quote" } },
     data: { nextValue: 2, prefix: "QUO", padding: 6 },
+  });
+
+  await prisma.job.create({
+    data: {
+      tenantId: tenant.id,
+      branchId: headOffice.id,
+      customerId: demoCustomer.id,
+      siteId: demoSite.id,
+      quoteId: seededQuote.id,
+      jobNumber: "JOB-2026-000001",
+      status: "SCHEDULED",
+      title: "Johnson lounge and hallway carpet refit",
+      currency: seededQuote.currency,
+      totalValue: seededQuote.grandTotal,
+      depositRequired: seededQuote.depositRequired,
+      depositPaid: seededQuote.depositPaid,
+      scheduledStart: new Date("2026-08-10T08:00:00.000Z"),
+      scheduledEnd: new Date("2026-08-10T16:00:00.000Z"),
+      accessNotes: "Parking available on driveway.",
+      workNotes: "Converted from seeded quote QUO-2026-000001.",
+      createdById: owner.id,
+      updatedById: owner.id,
+    },
+  });
+
+  await prisma.numberSequence.update({
+    where: { tenantId_key: { tenantId: tenant.id, key: "job" } },
+    data: { nextValue: 2, prefix: "JOB", padding: 6 },
   });
 
   await seedProcurement(prisma, tenant, headOffice, owner, manager);

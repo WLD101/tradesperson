@@ -3,29 +3,37 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { approveQuote, rejectQuote, sendQuote } from "@/lib/quotes-client";
+import { createJobFromQuote } from "@/lib/jobs-client";
 
 export function QuoteActions({
   quoteId,
   status,
   canSend,
   canApprove,
+  canConvert,
 }: {
   quoteId: string;
   status: string;
   canSend: boolean;
   canApprove: boolean;
+  canConvert: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const run = async (action: "send" | "approve" | "reject") => {
+  const run = async (action: "send" | "approve" | "reject" | "job") => {
     setPending(action);
     setError(null);
     try {
       if (action === "send") await sendQuote(quoteId);
       if (action === "approve") await approveQuote(quoteId);
       if (action === "reject") await rejectQuote(quoteId);
+      if (action === "job") {
+        const job = await createJobFromQuote(quoteId);
+        router.push(`/app/jobs/${job.id}`);
+        return;
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Quote action failed.");
@@ -51,6 +59,11 @@ export function QuoteActions({
             Reject
           </button>
         </>
+      ) : null}
+      {canConvert && status === "APPROVED" ? (
+        <button className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-50" disabled={pending === "job"} onClick={() => run("job")}>
+          {pending === "job" ? "Creating..." : "Create Job"}
+        </button>
       ) : null}
     </div>
   );

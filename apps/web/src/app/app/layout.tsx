@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { apiFetch, getSession } from "@/lib/api";
 import { getEstimatePermissions } from "@/lib/estimates";
+import { getJobPermissions } from "@/lib/jobs";
 import { getProcurementPermissions } from "@/lib/procurement";
 import { getQuotePermissions } from "@/lib/quotes";
 
@@ -48,6 +49,7 @@ export default async function AppLayout({
   const procurementPerms = getProcurementPermissions(session);
   const estimatePerms = getEstimatePermissions(session);
   const quotePerms = getQuotePermissions(session);
+  const jobPerms = getJobPermissions(session);
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
@@ -97,10 +99,11 @@ export default async function AppLayout({
                 <NavItem href="/app/suppliers" label="Suppliers" />
               </NavGroup>
 
-              {(estimatePerms.canRead || quotePerms.canRead) && (
+              {(estimatePerms.canRead || quotePerms.canRead || jobPerms.canRead) && (
                 <NavGroup title="Sales">
                   {estimatePerms.canRead && <NavItem href="/app/estimates" label="Estimates" />}
                   {quotePerms.canRead && <NavItem href="/app/quotes" label="Quotes" />}
+                  {jobPerms.canRead && <NavItem href="/app/jobs" label="Jobs" />}
                 </NavGroup>
               )}
 

@@ -328,6 +328,14 @@ enum QuoteVersionStatus {
   ARCHIVED
 }
 
+enum JobStatus {
+  DRAFT
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id                String                 @id @default(uuid()) @db.Uuid
   email             String                 @unique
@@ -445,6 +453,7 @@ model Tenant {
   quotes                     Quote[]
   quoteLines                 QuoteLine[]
   quoteVersions              QuoteVersion[]
+  jobs                       Job[]
 }
 
 model TenantMembership {
@@ -540,6 +549,7 @@ model Branch {
   purchaseOrders       PurchaseOrder[]
   estimates            Estimate[]
   quotes               Quote[]
+  jobs                 Job[]
 
   @@unique([tenantId, branchCode])
   @@index([tenantId, status])
@@ -598,6 +608,7 @@ model Customer {
   surveys        Survey[]
   estimates      Estimate[]
   quotes         Quote[]
+  jobs           Job[]
 
   @@index([tenantId, displayName])
   @@index([branchId])
@@ -645,6 +656,7 @@ model Site {
   surveys        Survey[]
   estimates      Estimate[]
   quotes         Quote[]
+  jobs           Job[]
 
   @@index([tenantId, customerId, createdAt])
   @@index([branchId])
@@ -1575,6 +1587,7 @@ model Quote {
   estimate           Estimate?    @relation(fields: [estimateId], references: [id], onDelete: SetNull)
   lines              QuoteLine[]
   versions           QuoteVersion[]
+  jobs               Job[]
 
   @@unique([tenantId, quoteNumber])
   @@index([tenantId, branchId, status, createdAt])
@@ -1631,6 +1644,41 @@ model QuoteVersion {
   @@unique([tenantId, quoteId, versionNumber])
   @@index([tenantId, status, createdAt])
   @@index([tenantId, quoteId, versionNumber])
+}
+
+model Job {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @db.Uuid
+  branchId        String?   @db.Uuid
+  customerId      String    @db.Uuid
+  siteId          String    @db.Uuid
+  quoteId         String?   @db.Uuid
+  jobNumber       String
+  status          JobStatus @default(DRAFT)
+  title           String?
+  currency        String    @default("GBP")
+  totalValue      Decimal   @default(0) @db.Decimal(14, 4)
+  depositRequired Decimal   @default(0) @db.Decimal(14, 4)
+  depositPaid     Decimal   @default(0) @db.Decimal(14, 4)
+  scheduledStart  DateTime?
+  scheduledEnd    DateTime?
+  accessNotes     String?
+  workNotes       String?
+  createdById     String?   @db.Uuid
+  updatedById     String?   @db.Uuid
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch          Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  site            Site      @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  quote           Quote?    @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, jobNumber])
+  @@index([tenantId, branchId, status, createdAt])
+  @@index([tenantId, customerId, createdAt])
+  @@index([tenantId, siteId, createdAt])
+  @@index([quoteId])
 }
 
 model PurchaseRequisitionLine {

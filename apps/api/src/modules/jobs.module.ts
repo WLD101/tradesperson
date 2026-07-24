@@ -1,0 +1,65 @@
+import { Body, Controller, Get, Module, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { JobStatus } from "@prisma/client/index";
+import { z } from "zod";
+import { JobsService } from "../services/jobs.service";
+import { AuthGuard } from "../shared/auth.guard";
+import { RequirePermissions } from "../shared/permissions.decorator";
+import { PermissionsGuard } from "../shared/permissions.guard";
+import { CurrentSession } from "../shared/session.decorator";
+
+const emptyStringToNull = (value: unknown) =>
+  typeof value === "string" && value.trim() === "" ? null : value;
+
+const listQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(100).optional(),
+  search: z.string().trim().min(1).max(120).optional(),
+  status: z.string().trim().min(1).max(60).optional(),
+});
+
+const createJobSchema = z.object({
+  status: z.nativeEnum(JobStatus).optional(),
+  title: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
+  scheduledStart: z.coerce.date().nullable().optional(),
+  scheduledEnd: z.coerce.date().nullable().optional(),
+  accessNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
+  workNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
+});
+
+type TenantSession = Parameters<JobsService["listJobs"]>[0];
+
+@Controller({ version: "1" })
+class JobsController {
+  constructor(private readonly jobs: JobsService) {}
+
+  @Get("jobs")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:read")
+  listJobs(@Query() query: unknown, @CurrentSession() session: TenantSession) {
+    return this.jobs.listJobs(session, listQuerySchema.parse(query));
+  }
+
+  @Get("jobs/:id")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:read")
+  getJob(@Param("id") id: string, @CurrentSession() session: TenantSession) {
+    return this.jobs.getJob(session, id);
+  }
+
+  @Post("quotes/:quoteId/create-job")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:create")
+  createFromQuote(
+    @Param("quoteId") quoteId: string,
+    @Body() body: unknown,
+    @CurrentSession() session: TenantSession,
+  ) {
+    return this.jobs.createFromQuote(session, quoteId, createJobSchema.parse(body) as any);
+  }
+}
+
+@Module({
+  controllers: [JobsController],
+  providers: [JobsService],
+})
+export class JobsModule {}

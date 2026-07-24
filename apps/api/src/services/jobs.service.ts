@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { JobStatus, Prisma, QuoteStatus } from "@prisma/client/index";
+import { EstimateLineType, JobStatus, Prisma, QuoteStatus } from "@prisma/client/index";
 import { AuditService } from "./audit.service";
 import { BranchAccessService } from "./branch-access.service";
 import { PrismaService } from "./prisma.service";
@@ -13,6 +13,15 @@ const JOB_INCLUDE: any = {
   customer: { select: { id: true, displayName: true, primaryEmail: true, primaryPhone: true } },
   site: { select: { id: true, label: true, addressLine1: true, city: true, postcode: true } },
   quote: { select: { id: true, quoteNumber: true, status: true, grandTotal: true } },
+  materialRequirements: {
+    orderBy: [{ createdAt: "asc" }],
+    include: {
+      product: { select: { id: true, name: true, sku: true } },
+      productVariant: { select: { id: true, name: true, sku: true } },
+      supplierProduct: { select: { id: true, supplierSku: true, supplierDescription: true } },
+      sourceQuoteLine: { select: { id: true, description: true, quantity: true, unit: true } },
+    },
+  },
 };
 
 @Injectable()
@@ -63,6 +72,14 @@ export class JobsService {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const quote = await this.prisma.client.quote.findFirst({
       where: { id: quoteId, tenantId, ...this.branchAccess.branchWhere(session, tenantId) },
+      include: {
+        lines: {
+          orderBy: [{ displayOrder: "asc" }],
+          include: {
+            sourceEstimateLine: true,
+          },
+        },
+      },
     });
     if (!quote) throw new NotFoundException("Resource not found.");
     if (quote.status !== QuoteStatus.APPROVED) {
@@ -92,10 +109,10 @@ export class JobsService {
           createdById: session.user.id,
           updatedById: session.user.id,
         },
-        include: JOB_INCLUDE,
       });
+      await this.createMissingMaterialRequirementsTx(tx, tenantId, created, quote.lines, session.user.id);
       await tx.quote.update({ where: { id: quote.id }, data: { status: QuoteStatus.CONVERTED } });
-      return created;
+      return tx.job.findFirstOrThrow({ where: { id: created.id, tenantId }, include: JOB_INCLUDE });
     });
 
     await this.audit.record({
@@ -107,6 +124,46 @@ export class JobsService {
       newValues: { jobNumber: job.jobNumber, quoteId },
     });
     return job;
+  }
+
+  async generateMaterialRequirements(session: TenantSession, jobId: string) {
+    const job = await this.ensureJob(session, jobId, {
+      include: {
+        quote: {
+          include: {
+            lines: {
+              orderBy: [{ displayOrder: "asc" }],
+              include: { sourceEstimateLine: true },
+            },
+          },
+        },
+      },
+    });
+    if (!job.quote) {
+      throw new BadRequestException("This job is not linked to a quote.");
+    }
+
+    const updated = await this.prisma.client.$transaction(async (tx) => {
+      await this.createMissingMaterialRequirementsTx(
+        tx,
+        job.tenantId,
+        job,
+        job.quote.lines,
+        session.user.id,
+      );
+      return tx.job.findFirstOrThrow({ where: { id: job.id, tenantId: job.tenantId }, include: JOB_INCLUDE });
+    });
+
+    await this.audit.record({
+      tenantId: job.tenantId,
+      actorUserId: session.user.id,
+      action: "job:material-requirements:generate",
+      entityType: "job",
+      entityId: job.id,
+      newValues: { jobNumber: job.jobNumber },
+    });
+
+    return updated;
   }
 
   private async ensureJob(session: TenantSession, jobId: string, args?: Omit<Prisma.JobFindFirstArgs, "where">): Promise<any> {
@@ -131,6 +188,56 @@ export class JobsService {
     const row = rows[0];
     if (!row) throw new BadRequestException("Unable to allocate job number.");
     return `${row.prefix}-${new Date().getUTCFullYear()}-${String(row.nextValue - 1).padStart(row.padding, "0")}`;
+  }
+
+  private async createMissingMaterialRequirementsTx(
+    tx: PrismaTransaction,
+    tenantId: string,
+    job: { id: string; branchId: string | null; scheduledStart?: Date | null },
+    quoteLines: Array<{
+      id: string;
+      sourceEstimateLineId: string | null;
+      lineType: EstimateLineType;
+      description: string;
+      quantity: Prisma.Decimal;
+      unit: string;
+      notes: string | null;
+      sourceEstimateLine: {
+        id: string;
+        productId: string | null;
+        productVariantId: string | null;
+        supplierProductId: string | null;
+      } | null;
+    }>,
+    actorUserId: string,
+  ) {
+    const materialLines = quoteLines.filter((line) =>
+      line.lineType === EstimateLineType.MATERIAL || line.lineType === EstimateLineType.ACCESSORY,
+    );
+    if (!materialLines.length) {
+      return;
+    }
+
+    await tx.materialRequirement.createMany({
+      skipDuplicates: true,
+      data: materialLines.map((line) => ({
+        tenantId,
+        branchId: job.branchId,
+        jobId: job.id,
+        sourceQuoteLineId: line.id,
+        sourceEstimateLineId: line.sourceEstimateLineId,
+        productId: line.sourceEstimateLine?.productId ?? null,
+        productVariantId: line.sourceEstimateLine?.productVariantId ?? null,
+        supplierProductId: line.sourceEstimateLine?.supplierProductId ?? null,
+        description: line.description,
+        requiredQuantity: line.quantity,
+        unit: line.unit,
+        requiredDate: job.scheduledStart ?? null,
+        notes: line.notes,
+        createdById: actorUserId,
+        updatedById: actorUserId,
+      })),
+    });
   }
 
   private trimOrNull(value: string | null | undefined) {

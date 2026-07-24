@@ -2,13 +2,20 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Breadcrumbs, DateDisplay, Money, PageHeader, StatusBadge, SummaryStrip } from "@/components/shared";
 import { getSession } from "@/lib/api";
-import { getJob, getJobPermissions } from "@/lib/jobs";
+import { generateJobMaterialRequirements, getJob, getJobPermissions } from "@/lib/jobs";
 
 function statusColor(status: string) {
   if (status === "SCHEDULED") return "blue" as const;
   if (["IN_PROGRESS", "COMPLETED"].includes(status)) return "green" as const;
   if (status === "CANCELLED") return "red" as const;
   return "slate" as const;
+}
+
+async function generateRequirementsAction(formData: FormData) {
+  "use server";
+  const jobId = String(formData.get("jobId") ?? "");
+  if (!jobId) return;
+  await generateJobMaterialRequirements(jobId);
 }
 
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -25,6 +32,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     throw err;
   }
   const depositComplete = Number(job.depositRequired) <= Number(job.depositPaid);
+  const materialRequirements = job.materialRequirements ?? [];
 
   return (
     <div className="space-y-6">
@@ -61,6 +69,75 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           </dl>
         </section>
       </div>
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-950">Material Requirements</h2>
+            <p className="text-sm text-slate-500">Generated from material quote lines and ready for procurement and stock allocation.</p>
+          </div>
+          {!materialRequirements.length && perms.canWrite ? (
+            <form action={generateRequirementsAction}>
+              <input name="jobId" type="hidden" value={job.id} />
+              <button className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700" type="submit">
+                Generate requirements
+              </button>
+            </form>
+          ) : null}
+        </div>
+        {materialRequirements.length ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Material</th>
+                  <th className="px-4 py-3">Product</th>
+                  <th className="px-4 py-3 text-right">Required</th>
+                  <th className="px-4 py-3 text-right">Ordered</th>
+                  <th className="px-4 py-3 text-right">Received</th>
+                  <th className="px-4 py-3 text-right">Allocated</th>
+                  <th className="px-4 py-3 text-right">Shortfall</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {materialRequirements.map((requirement) => {
+                  const required = Number(requirement.requiredQuantity);
+                  const ordered = Number(requirement.orderedQuantity);
+                  const received = Number(requirement.receivedQuantity);
+                  const allocated = Number(requirement.allocatedQuantity);
+                  const shortfall = Math.max(0, required - Math.max(ordered, allocated));
+                  return (
+                    <tr key={requirement.id}>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-slate-900">{requirement.description}</div>
+                        <div className="text-xs text-slate-500">Required <DateDisplay date={requirement.requiredDate} /></div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div>{requirement.product?.name ?? "Unmatched material"}</div>
+                        <div className="text-xs text-slate-500">
+                          {[requirement.product?.sku, requirement.productVariant?.sku, requirement.supplierProduct?.supplierSku].filter(Boolean).join(" / ") || "-"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">{required.toFixed(2)} {requirement.unit}</td>
+                      <td className="px-4 py-3 text-right">{ordered.toFixed(2)} {requirement.unit}</td>
+                      <td className="px-4 py-3 text-right">{received.toFixed(2)} {requirement.unit}</td>
+                      <td className="px-4 py-3 text-right">{allocated.toFixed(2)} {requirement.unit}</td>
+                      <td className={shortfall > 0 ? "px-4 py-3 text-right font-semibold text-amber-700" : "px-4 py-3 text-right text-green-700"}>
+                        {shortfall.toFixed(2)} {requirement.unit}
+                      </td>
+                      <td className="px-4 py-3"><StatusBadge status={requirement.status} color={requirement.status === "PLANNED" ? "blue" : "green"} /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-6 text-sm text-slate-500">
+            No material requirements have been generated yet. Use the action above to create the first procurement-ready requirement list from this job's quote.
+          </div>
+        )}
+      </section>
     </div>
   );
 }

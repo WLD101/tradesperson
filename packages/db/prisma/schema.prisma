@@ -336,6 +336,16 @@ enum JobStatus {
   CANCELLED
 }
 
+enum MaterialRequirementStatus {
+  PLANNED
+  PARTIALLY_ORDERED
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  ALLOCATED
+  CANCELLED
+}
+
 model User {
   id                String                 @id @default(uuid()) @db.Uuid
   email             String                 @unique
@@ -454,6 +464,7 @@ model Tenant {
   quoteLines                 QuoteLine[]
   quoteVersions              QuoteVersion[]
   jobs                       Job[]
+  materialRequirements       MaterialRequirement[]
 }
 
 model TenantMembership {
@@ -550,6 +561,7 @@ model Branch {
   estimates            Estimate[]
   quotes               Quote[]
   jobs                 Job[]
+  materialRequirements MaterialRequirement[]
 
   @@unique([tenantId, branchCode])
   @@index([tenantId, status])
@@ -1141,6 +1153,7 @@ model SupplierProduct {
   purchaseRequisitionLines PurchaseRequisitionLine[]
   purchaseOrderLines       PurchaseOrderLine[]
   estimateLines            EstimateLine[]
+  materialRequirements     MaterialRequirement[]
 
   @@unique([tenantId, supplierId, supplierSku])
   @@index([tenantId, supplierId, status])
@@ -1508,6 +1521,7 @@ model EstimateLine {
   supplierProduct        SupplierProduct?      @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
   supplierProductPrice   SupplierProductPrice? @relation(fields: [supplierProductPriceId], references: [id], onDelete: SetNull)
   quoteLines             QuoteLine[]
+  materialRequirements   MaterialRequirement[]
 
   @@index([tenantId, estimateId, displayOrder])
   @@index([estimateRoomId])
@@ -1617,6 +1631,7 @@ model QuoteLine {
   tenant               Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   quote                Quote            @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   sourceEstimateLine   EstimateLine?    @relation(fields: [sourceEstimateLineId], references: [id], onDelete: SetNull)
+  materialRequirements MaterialRequirement[]
 
   @@index([tenantId, quoteId, displayOrder])
   @@index([sourceEstimateLineId])
@@ -1673,12 +1688,54 @@ model Job {
   customer        Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
   site            Site      @relation(fields: [siteId], references: [id], onDelete: Restrict)
   quote           Quote?    @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  materialRequirements MaterialRequirement[]
 
   @@unique([tenantId, jobNumber])
   @@index([tenantId, branchId, status, createdAt])
   @@index([tenantId, customerId, createdAt])
   @@index([tenantId, siteId, createdAt])
   @@index([quoteId])
+}
+
+model MaterialRequirement {
+  id                   String                    @id @default(uuid()) @db.Uuid
+  tenantId             String                    @db.Uuid
+  branchId             String?                   @db.Uuid
+  jobId                String                    @db.Uuid
+  sourceQuoteLineId    String?                   @db.Uuid
+  sourceEstimateLineId String?                   @db.Uuid
+  productId            String?                   @db.Uuid
+  productVariantId     String?                   @db.Uuid
+  supplierProductId    String?                   @db.Uuid
+  status               MaterialRequirementStatus @default(PLANNED)
+  description          String
+  requiredQuantity     Decimal                   @db.Decimal(14, 4)
+  orderedQuantity      Decimal                   @default(0) @db.Decimal(14, 4)
+  receivedQuantity     Decimal                   @default(0) @db.Decimal(14, 4)
+  allocatedQuantity    Decimal                   @default(0) @db.Decimal(14, 4)
+  unit                 String
+  requiredDate         DateTime?
+  notes                String?
+  createdById          String?                   @db.Uuid
+  updatedById          String?                   @db.Uuid
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  tenant               Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch               Branch?                   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  job                  Job                       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  sourceQuoteLine      QuoteLine?                @relation(fields: [sourceQuoteLineId], references: [id], onDelete: SetNull)
+  sourceEstimateLine   EstimateLine?             @relation(fields: [sourceEstimateLineId], references: [id], onDelete: SetNull)
+  product              Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productVariant       ProductVariant?           @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  supplierProduct      SupplierProduct?          @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, jobId, sourceQuoteLineId])
+  @@index([tenantId, jobId, status])
+  @@index([tenantId, branchId, status, createdAt])
+  @@index([tenantId, productId])
+  @@index([productVariantId])
+  @@index([supplierProductId])
+  @@index([sourceEstimateLineId])
 }
 
 model PurchaseRequisitionLine {
@@ -1922,6 +1979,7 @@ model Product {
   purchaseRequisitionLines    PurchaseRequisitionLine[]
   purchaseOrderLines          PurchaseOrderLine[]
   estimateLines               EstimateLine[]
+  materialRequirements        MaterialRequirement[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, sku])
@@ -1968,6 +2026,7 @@ model ProductVariant {
   purchaseRequisitionLines PurchaseRequisitionLine[]
   purchaseOrderLines       PurchaseOrderLine[]
   estimateLines            EstimateLine[]
+  materialRequirements     MaterialRequirement[]
 
   @@unique([tenantId, sku])
   @@index([tenantId, productId, lifecycleStatus])

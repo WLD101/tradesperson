@@ -56,6 +56,13 @@ class JobsController {
   ) {
     return this.jobs.createFromQuote(session, quoteId, createJobSchema.parse(body) as any);
   }
+
+  @Post("jobs/:id/material-requirements/generate")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:write")
+  generateMaterialRequirements(@Param("id") id: string, @CurrentSession() session: TenantSession) {
+    return this.jobs.generateMaterialRequirements(session, id);
+  }
 }
 
 @Module({

@@ -2370,7 +2370,8 @@ async function main() {
     data: { nextValue: 2, prefix: "QUO", padding: 6 },
   });
 
-  await prisma.job.create({
+  const estimateLineById = new Map(calculatedEstimate.lines.map((line) => [line.id, line]));
+  const seededJob = await prisma.job.create({
     data: {
       tenantId: tenant.id,
       branchId: headOffice.id,
@@ -2391,6 +2392,33 @@ async function main() {
       createdById: owner.id,
       updatedById: owner.id,
     },
+  });
+
+  await prisma.materialRequirement.createMany({
+    data: seededQuote.lines
+      .filter((line) => line.lineType === "MATERIAL" || line.lineType === "ACCESSORY")
+      .map((line) => {
+        const estimateLine = line.sourceEstimateLineId
+          ? estimateLineById.get(line.sourceEstimateLineId)
+          : null;
+        return {
+          tenantId: tenant.id,
+          branchId: headOffice.id,
+          jobId: seededJob.id,
+          sourceQuoteLineId: line.id,
+          sourceEstimateLineId: line.sourceEstimateLineId,
+          productId: estimateLine?.productId ?? null,
+          productVariantId: estimateLine?.productVariantId ?? null,
+          supplierProductId: estimateLine?.supplierProductId ?? null,
+          description: line.description,
+          requiredQuantity: line.quantity,
+          unit: line.unit,
+          requiredDate: seededJob.scheduledStart,
+          notes: "Seeded material requirement generated from QUO-2026-000001.",
+          createdById: owner.id,
+          updatedById: owner.id,
+        };
+      }),
   });
 
   await prisma.numberSequence.update({

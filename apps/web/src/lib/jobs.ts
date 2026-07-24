@@ -19,6 +19,24 @@ export type Job = {
   site?: { id: string; label: string; addressLine1?: string | null; city?: string | null; postcode?: string | null };
   branch?: { id: string; name: string };
   quote?: { id: string; quoteNumber: string; status: string; grandTotal: string } | null;
+  materialRequirements?: MaterialRequirement[];
+};
+
+export type MaterialRequirement = {
+  id: string;
+  status: "PLANNED" | "PARTIALLY_ORDERED" | "ORDERED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "ALLOCATED" | "CANCELLED";
+  description: string;
+  requiredQuantity: string;
+  orderedQuantity: string;
+  receivedQuantity: string;
+  allocatedQuantity: string;
+  unit: string;
+  requiredDate: string | null;
+  notes: string | null;
+  product?: { id: string; name: string; sku: string } | null;
+  productVariant?: { id: string; name: string; sku: string } | null;
+  supplierProduct?: { id: string; supplierSku: string; supplierDescription: string | null } | null;
+  sourceQuoteLine?: { id: string; description: string; quantity: string; unit: string } | null;
 };
 
 export async function getJobs(params?: Record<string, string | number | undefined>) {
@@ -32,6 +50,13 @@ export async function getJobs(params?: Record<string, string | number | undefine
 
 export async function getJob(id: string) {
   return apiFetch<Job>(`/api/v1/jobs/${id}`);
+}
+
+export async function generateJobMaterialRequirements(id: string) {
+  return apiFetch<Job>(`/api/v1/jobs/${id}/material-requirements/generate`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
 }
 
 export function getJobPermissions(session: SessionContext | null) {

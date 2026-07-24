@@ -26,6 +26,13 @@ const createJobSchema = z.object({
   workNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
 });
 
+const createRequisitionFromRequirementsSchema = z.object({
+  materialRequirementIds: z.array(z.string().uuid()).optional(),
+  requiredDate: z.coerce.date().nullable().optional(),
+  purpose: z.preprocess(emptyStringToNull, z.string().max(1000).nullable()).optional(),
+  internalNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
+});
+
 type TenantSession = Parameters<JobsService["listJobs"]>[0];
 
 @Controller({ version: "1" })
@@ -62,6 +69,21 @@ class JobsController {
   @RequirePermissions("job:write")
   generateMaterialRequirements(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.jobs.generateMaterialRequirements(session, id);
+  }
+
+  @Post("jobs/:id/material-requirements/create-requisition")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:write", "procurement:requisition:create")
+  createRequisitionFromRequirements(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentSession() session: TenantSession,
+  ) {
+    return this.jobs.createRequisitionFromRequirements(
+      session,
+      id,
+      createRequisitionFromRequirementsSchema.parse(body),
+    );
   }
 }
 

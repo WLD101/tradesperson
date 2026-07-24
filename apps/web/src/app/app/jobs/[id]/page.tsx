@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Breadcrumbs, DateDisplay, Money, PageHeader, StatusBadge, SummaryStrip } from "@/components/shared";
 import { getSession } from "@/lib/api";
-import { generateJobMaterialRequirements, getJob, getJobPermissions } from "@/lib/jobs";
+import { createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions } from "@/lib/jobs";
 
 function statusColor(status: string) {
   if (status === "SCHEDULED") return "blue" as const;
@@ -16,6 +16,13 @@ async function generateRequirementsAction(formData: FormData) {
   const jobId = String(formData.get("jobId") ?? "");
   if (!jobId) return;
   await generateJobMaterialRequirements(jobId);
+}
+
+async function createRequisitionAction(formData: FormData) {
+  "use server";
+  const jobId = String(formData.get("jobId") ?? "");
+  if (!jobId) return;
+  await createJobMaterialRequisition(jobId);
 }
 
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -33,6 +40,11 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   }
   const depositComplete = Number(job.depositRequired) <= Number(job.depositPaid);
   const materialRequirements = job.materialRequirements ?? [];
+  const hasOutstandingRequirements = materialRequirements.some((requirement) => {
+    const required = Number(requirement.requiredQuantity);
+    const requisitioned = Number(requirement.requisitionedQuantity);
+    return required > requisitioned;
+  });
 
   return (
     <div className="space-y-6">
@@ -83,6 +95,14 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               </button>
             </form>
           ) : null}
+          {materialRequirements.length && hasOutstandingRequirements && perms.canWrite ? (
+            <form action={createRequisitionAction}>
+              <input name="jobId" type="hidden" value={job.id} />
+              <button className="rounded-md bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-600" type="submit">
+                Create draft requisition
+              </button>
+            </form>
+          ) : null}
         </div>
         {materialRequirements.length ? (
           <div className="mt-4 overflow-x-auto">
@@ -92,20 +112,23 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                   <th className="px-4 py-3">Material</th>
                   <th className="px-4 py-3">Product</th>
                   <th className="px-4 py-3 text-right">Required</th>
+                  <th className="px-4 py-3 text-right">Requisitioned</th>
                   <th className="px-4 py-3 text-right">Ordered</th>
                   <th className="px-4 py-3 text-right">Received</th>
                   <th className="px-4 py-3 text-right">Allocated</th>
-                  <th className="px-4 py-3 text-right">Shortfall</th>
+                  <th className="px-4 py-3 text-right">To requisition</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Requisition</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {materialRequirements.map((requirement) => {
                   const required = Number(requirement.requiredQuantity);
+                  const requisitioned = Number(requirement.requisitionedQuantity);
                   const ordered = Number(requirement.orderedQuantity);
                   const received = Number(requirement.receivedQuantity);
                   const allocated = Number(requirement.allocatedQuantity);
-                  const shortfall = Math.max(0, required - Math.max(ordered, allocated));
+                  const toRequisition = Math.max(0, required - requisitioned);
                   return (
                     <tr key={requirement.id}>
                       <td className="px-4 py-3">
@@ -119,13 +142,21 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right">{required.toFixed(2)} {requirement.unit}</td>
+                      <td className="px-4 py-3 text-right">{requisitioned.toFixed(2)} {requirement.unit}</td>
                       <td className="px-4 py-3 text-right">{ordered.toFixed(2)} {requirement.unit}</td>
                       <td className="px-4 py-3 text-right">{received.toFixed(2)} {requirement.unit}</td>
                       <td className="px-4 py-3 text-right">{allocated.toFixed(2)} {requirement.unit}</td>
-                      <td className={shortfall > 0 ? "px-4 py-3 text-right font-semibold text-amber-700" : "px-4 py-3 text-right text-green-700"}>
-                        {shortfall.toFixed(2)} {requirement.unit}
+                      <td className={toRequisition > 0 ? "px-4 py-3 text-right font-semibold text-amber-700" : "px-4 py-3 text-right text-green-700"}>
+                        {toRequisition.toFixed(2)} {requirement.unit}
                       </td>
                       <td className="px-4 py-3"><StatusBadge status={requirement.status} color={requirement.status === "PLANNED" ? "blue" : "green"} /></td>
+                      <td className="px-4 py-3">
+                        {requirement.purchaseRequisitionLine ? (
+                          <Link className="font-medium text-blue-600" href={`/app/procurement/requisitions/${requirement.purchaseRequisitionLine.purchaseRequisition.id}`}>
+                            {requirement.purchaseRequisitionLine.purchaseRequisition.requisitionNumber}
+                          </Link>
+                        ) : "-"}
+                      </td>
                     </tr>
                   );
                 })}

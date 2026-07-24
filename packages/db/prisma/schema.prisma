@@ -338,6 +338,8 @@ enum JobStatus {
 
 enum MaterialRequirementStatus {
   PLANNED
+  PARTIALLY_REQUISITIONED
+  REQUISITIONED
   PARTIALLY_ORDERED
   ORDERED
   PARTIALLY_RECEIVED
@@ -1710,11 +1712,13 @@ model MaterialRequirement {
   status               MaterialRequirementStatus @default(PLANNED)
   description          String
   requiredQuantity     Decimal                   @db.Decimal(14, 4)
+  requisitionedQuantity Decimal                  @default(0) @db.Decimal(14, 4)
   orderedQuantity      Decimal                   @default(0) @db.Decimal(14, 4)
   receivedQuantity     Decimal                   @default(0) @db.Decimal(14, 4)
   allocatedQuantity    Decimal                   @default(0) @db.Decimal(14, 4)
   unit                 String
   requiredDate         DateTime?
+  purchaseRequisitionLineId String?              @unique @db.Uuid
   notes                String?
   createdById          String?                   @db.Uuid
   updatedById          String?                   @db.Uuid
@@ -1725,6 +1729,7 @@ model MaterialRequirement {
   job                  Job                       @relation(fields: [jobId], references: [id], onDelete: Cascade)
   sourceQuoteLine      QuoteLine?                @relation(fields: [sourceQuoteLineId], references: [id], onDelete: SetNull)
   sourceEstimateLine   EstimateLine?             @relation(fields: [sourceEstimateLineId], references: [id], onDelete: SetNull)
+  purchaseRequisitionLine PurchaseRequisitionLine? @relation(fields: [purchaseRequisitionLineId], references: [id], onDelete: SetNull)
   product              Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
   productVariant       ProductVariant?           @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
   supplierProduct      SupplierProduct?          @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
@@ -1736,6 +1741,7 @@ model MaterialRequirement {
   @@index([productVariantId])
   @@index([supplierProductId])
   @@index([sourceEstimateLineId])
+  @@index([purchaseRequisitionLineId])
 }
 
 model PurchaseRequisitionLine {
@@ -1764,6 +1770,7 @@ model PurchaseRequisitionLine {
   supplierProduct       SupplierProduct?    @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
   preferredSupplier     Supplier?           @relation("PreferredSupplier", fields: [preferredSupplierId], references: [id], onDelete: SetNull)
   purchaseOrderLines    PurchaseOrderLine[]
+  materialRequirement   MaterialRequirement?
 
   @@index([tenantId, purchaseRequisitionId, displayOrder])
   @@index([tenantId, productId])

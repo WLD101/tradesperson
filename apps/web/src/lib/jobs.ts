@@ -27,6 +27,7 @@ export type MaterialRequirement = {
   status: "PLANNED" | "PARTIALLY_ORDERED" | "ORDERED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "ALLOCATED" | "CANCELLED";
   description: string;
   requiredQuantity: string;
+  requisitionedQuantity: string;
   orderedQuantity: string;
   receivedQuantity: string;
   allocatedQuantity: string;
@@ -37,6 +38,10 @@ export type MaterialRequirement = {
   productVariant?: { id: string; name: string; sku: string } | null;
   supplierProduct?: { id: string; supplierSku: string; supplierDescription: string | null } | null;
   sourceQuoteLine?: { id: string; description: string; quantity: string; unit: string } | null;
+  purchaseRequisitionLine?: {
+    id: string;
+    purchaseRequisition: { id: string; requisitionNumber: string; status: string };
+  } | null;
 };
 
 export async function getJobs(params?: Record<string, string | number | undefined>) {
@@ -54,6 +59,13 @@ export async function getJob(id: string) {
 
 export async function generateJobMaterialRequirements(id: string) {
   return apiFetch<Job>(`/api/v1/jobs/${id}/material-requirements/generate`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function createJobMaterialRequisition(id: string) {
+  return apiFetch<Job>(`/api/v1/jobs/${id}/material-requirements/create-requisition`, {
     method: "POST",
     body: JSON.stringify({}),
   });

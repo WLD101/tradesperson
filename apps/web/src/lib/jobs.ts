@@ -72,7 +72,7 @@ export type MaterialRequirement = {
 export type Invoice = {
   id: string;
   invoiceNumber: string;
-  status: "DRAFT" | "ISSUED" | "PAID" | "CANCELLED";
+  status: "DRAFT" | "ISSUED" | "PARTIALLY_PAID" | "PAID" | "CANCELLED";
   currency: string;
   subtotal: string;
   vatAmount: string;
@@ -161,7 +161,7 @@ export async function createJobInvoice(id: string, payload: { dueDate?: string; 
 
 export async function recordInvoicePayment(
   invoiceId: string,
-  payload: { amount: number; method?: string; reference?: string; paidAt?: string; notes?: string },
+  payload: { amount: number; method?: string; reference?: string; idempotencyKey?: string; paidAt?: string; notes?: string },
 ) {
   return apiFetch<Job>(`/api/v1/invoices/${invoiceId}/payments`, {
     method: "POST",

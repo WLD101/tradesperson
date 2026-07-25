@@ -82,6 +82,7 @@ async function recordPaymentAction(formData: FormData) {
     amount,
     method: String(formData.get("method") ?? ""),
     reference: String(formData.get("reference") ?? ""),
+    idempotencyKey: String(formData.get("idempotencyKey") ?? ""),
     paidAt: String(formData.get("paidAt") ?? ""),
     notes: String(formData.get("notes") ?? ""),
   });
@@ -277,6 +278,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             {Number(activeInvoice.balanceDue) > 0 && perms.canWrite ? (
               <form action={recordPaymentAction} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <input name="invoiceId" type="hidden" value={activeInvoice.id} />
+                <input name="idempotencyKey" type="hidden" value={`${activeInvoice.id}:${activeInvoice.balanceDue}:${Date.now()}`} />
                 <h3 className="font-semibold text-slate-950">Record payment</h3>
                 <div className="mt-4 space-y-3">
                   <label className="block space-y-1 text-sm">

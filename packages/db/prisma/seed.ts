@@ -2011,6 +2011,8 @@ async function main() {
   });
 
   await prisma.stockReservation.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.payment.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.invoice.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.stockBalance.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.inventoryWarehouse.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.job.deleteMany({ where: { tenantId: tenant.id } });

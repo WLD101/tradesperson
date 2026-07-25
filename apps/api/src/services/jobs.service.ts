@@ -527,7 +527,12 @@ export class JobsService {
   }
 
   async createInvoiceFromJob(session: TenantSession, jobId: string, input: any) {
-    const job = await this.ensureJob(session, jobId, { include: { invoices: true } });
+    const job = await this.ensureJob(session, jobId, {
+      include: {
+        invoices: true,
+        quote: { select: { subtotal: true, vatAmount: true, grandTotal: true } },
+      },
+    });
     if (job.status !== JobStatus.COMPLETED) {
       throw new BadRequestException("Only completed jobs can be invoiced.");
     }
@@ -539,7 +544,9 @@ export class JobsService {
 
     const updated = await this.prisma.client.$transaction(async (tx) => {
       const invoiceNumber = await this.allocateNumber(tx, job.tenantId, "invoice", "INV");
-      const total = this.money(job.totalValue);
+      const subtotal = job.quote ? this.money(job.quote.subtotal) : this.money(job.totalValue);
+      const vatAmount = job.quote ? this.money(job.quote.vatAmount) : this.money(0);
+      const total = job.quote ? this.money(job.quote.grandTotal) : this.money(job.totalValue);
       const paidAmount = Prisma.Decimal.min(this.money(job.depositPaid), total);
       const balanceDue = total.minus(paidAmount);
       const dueDate = input.dueDate ?? this.defaultDueDate();
@@ -552,10 +559,10 @@ export class JobsService {
           customerId: job.customerId,
           siteId: job.siteId,
           invoiceNumber,
-          status: balanceDue.lessThanOrEqualTo(0) ? InvoiceStatus.PAID : InvoiceStatus.ISSUED,
+          status: this.invoiceStatusFor(paidAmount, balanceDue),
           currency: job.currency,
-          subtotal: total,
-          vatAmount: 0,
+          subtotal,
+          vatAmount,
           total,
           paidAmount,
           balanceDue,
@@ -593,6 +600,15 @@ export class JobsService {
       include: { job: true },
     });
     if (!invoice) throw new NotFoundException("Resource not found.");
+    const idempotencyKey = this.trimOrNull(input.idempotencyKey);
+    if (idempotencyKey) {
+      const existingPayment = await this.prisma.client.payment.findFirst({
+        where: { tenantId: invoice.tenantId, invoiceId: invoice.id, idempotencyKey },
+      });
+      if (existingPayment) {
+        return this.ensureJob(session, invoice.jobId, { include: JOB_INCLUDE });
+      }
+    }
     if (invoice.status === InvoiceStatus.CANCELLED) {
       throw new BadRequestException("Cancelled invoices cannot receive payments.");
     }
@@ -623,6 +639,7 @@ export class JobsService {
           currency: invoice.currency,
           method: this.trimOrNull(input.method),
           reference: this.trimOrNull(input.reference),
+          idempotencyKey,
           paidAt: input.paidAt ?? new Date(),
           notes: this.trimOrNull(input.notes),
           createdById: session.user.id,
@@ -633,7 +650,7 @@ export class JobsService {
         data: {
           paidAmount,
           balanceDue,
-          status: balanceDue.lessThanOrEqualTo(0) ? InvoiceStatus.PAID : InvoiceStatus.ISSUED,
+          status: this.invoiceStatusFor(paidAmount, balanceDue),
           updatedById: session.user.id,
         },
       });
@@ -761,6 +778,12 @@ export class JobsService {
     const dueDate = new Date();
     dueDate.setUTCDate(dueDate.getUTCDate() + 14);
     return dueDate;
+  }
+
+  private invoiceStatusFor(paidAmount: Prisma.Decimal, balanceDue: Prisma.Decimal) {
+    if (balanceDue.lessThanOrEqualTo(0)) return InvoiceStatus.PAID;
+    if (paidAmount.greaterThan(0)) return InvoiceStatus.PARTIALLY_PAID;
+    return InvoiceStatus.ISSUED;
   }
 
   private trimOrNull(value: string | null | undefined) {

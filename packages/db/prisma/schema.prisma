@@ -361,6 +361,7 @@ enum StockReservationStatus {
 enum InvoiceStatus {
   DRAFT
   ISSUED
+  PARTIALLY_PAID
   PAID
   CANCELLED
 }
@@ -1839,30 +1840,33 @@ model Invoice {
   payments      Payment[]
 
   @@unique([tenantId, invoiceNumber])
+  @@unique([tenantId, jobId])
   @@index([tenantId, jobId])
   @@index([tenantId, branchId, status, createdAt])
 }
 
 model Payment {
-  id            String        @id @default(uuid()) @db.Uuid
-  tenantId      String        @db.Uuid
-  branchId      String?       @db.Uuid
-  invoiceId     String        @db.Uuid
-  paymentNumber String
-  status        PaymentStatus @default(RECORDED)
-  amount        Decimal       @db.Decimal(14, 4)
-  currency      String        @default("GBP")
-  method        String?
-  reference     String?
-  paidAt        DateTime      @default(now())
-  notes         String?
-  createdById   String?       @db.Uuid
-  createdAt     DateTime      @default(now())
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  branch        Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  id             String        @id @default(uuid()) @db.Uuid
+  tenantId       String        @db.Uuid
+  branchId       String?       @db.Uuid
+  invoiceId      String        @db.Uuid
+  paymentNumber  String
+  status         PaymentStatus @default(RECORDED)
+  amount         Decimal       @db.Decimal(14, 4)
+  currency       String        @default("GBP")
+  method         String?
+  reference      String?
+  paidAt         DateTime      @default(now())
+  notes          String?
+  createdById    String?       @db.Uuid
+  createdAt      DateTime      @default(now())
+  idempotencyKey String?
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  invoice        Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, paymentNumber])
+  @@unique([tenantId, invoiceId, idempotencyKey])
   @@index([tenantId, invoiceId])
   @@index([tenantId, branchId, paidAt])
 }

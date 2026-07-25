@@ -55,6 +55,7 @@ const recordPaymentSchema = z.object({
   amount: z.coerce.number().positive(),
   method: z.preprocess(emptyStringToNull, z.string().max(80).nullable()).optional(),
   reference: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
+  idempotencyKey: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
   paidAt: z.preprocess(emptyStringToNull, z.coerce.date().nullable()).optional(),
   notes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
 });

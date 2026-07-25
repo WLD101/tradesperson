@@ -284,6 +284,25 @@ enum PurchaseOrderDeliveryPlanStatus {
   COMPLETED
 }
 
+enum GoodsReceiptStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
+enum InventoryMovementType {
+  GOODS_RECEIPT
+  MATERIAL_ISSUE
+  MATERIAL_RETURN
+  ADJUSTMENT
+}
+
+enum InventoryMovementCondition {
+  USABLE
+  DAMAGED
+  REJECTED
+}
+
 enum EstimateStatus {
   DRAFT
   CALCULATED
@@ -481,6 +500,9 @@ model Tenant {
   purchaseOrderLines         PurchaseOrderLine[]
   supplierAcknowledgements   SupplierAcknowledgement[]
   purchaseOrderDeliveryPlans PurchaseOrderDeliveryPlan[]
+  goodsReceipts              GoodsReceipt[]
+  goodsReceiptLines          GoodsReceiptLine[]
+  inventoryMovements         InventoryMovement[]
   estimates                  Estimate[]
   estimateRooms              EstimateRoom[]
   estimateLines              EstimateLine[]
@@ -588,6 +610,9 @@ model Branch {
   supplierContacts     SupplierContact[]
   purchaseRequisitions PurchaseRequisition[]
   purchaseOrders       PurchaseOrder[]
+  goodsReceipts        GoodsReceipt[]
+  goodsReceiptLines    GoodsReceiptLine[]
+  inventoryMovements   InventoryMovement[]
   estimates            Estimate[]
   quotes               Quote[]
   jobs                 Job[]
@@ -1193,6 +1218,8 @@ model SupplierProduct {
   materialRequirements     MaterialRequirement[]
   stockBalances            StockBalance[]
   stockReservations        StockReservation[]
+  goodsReceiptLines        GoodsReceiptLine[]
+  inventoryMovements       InventoryMovement[]
 
   @@unique([tenantId, supplierId, supplierSku])
   @@index([tenantId, supplierId, status])
@@ -1733,6 +1760,7 @@ model Job {
   quote                Quote?                @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   materialRequirements MaterialRequirement[]
   stockReservations    StockReservation[]
+  inventoryMovements   InventoryMovement[]
   invoices             Invoice[]
 
   @@unique([tenantId, jobNumber])
@@ -1778,6 +1806,7 @@ model MaterialRequirement {
   productVariant            ProductVariant?           @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
   supplierProduct           SupplierProduct?          @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
   stockReservations         StockReservation[]
+  inventoryMovements        InventoryMovement[]
 
   @@unique([tenantId, jobId, sourceQuoteLineId])
   @@index([tenantId, jobId, status])
@@ -1805,6 +1834,8 @@ model InventoryWarehouse {
   branch            Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
   stockBalances     StockBalance[]
   stockReservations StockReservation[]
+  goodsReceipts     GoodsReceipt[]
+  inventoryMovements InventoryMovement[]
 
   @@unique([tenantId, code])
   @@index([tenantId, branchId])
@@ -1892,6 +1923,7 @@ model StockBalance {
   productVariant    ProductVariant?    @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
   supplierProduct   SupplierProduct?   @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
   reservations      StockReservation[]
+  movements         InventoryMovement[]
 
   @@unique([tenantId, warehouseId, productId, productVariantId, supplierProductId])
   @@index([tenantId, productId])
@@ -2005,6 +2037,7 @@ model PurchaseOrder {
   versions              PurchaseOrderVersion[]      @relation("PurchaseOrderVersions")
   acknowledgements      SupplierAcknowledgement[]
   deliveryPlans         PurchaseOrderDeliveryPlan[]
+  goodsReceipts         GoodsReceipt[]
 
   @@unique([tenantId, purchaseOrderNumber])
   @@index([tenantId, branchId, status, createdAt])
@@ -2041,6 +2074,7 @@ model PurchaseOrderVersion {
   lines             PurchaseOrderLine[]
   acknowledgements  SupplierAcknowledgement[]
   deliveryPlans     PurchaseOrderDeliveryPlan[]
+  goodsReceipts     GoodsReceipt[]
 
   @@unique([tenantId, purchaseOrderId, versionNumber])
   @@index([tenantId, status, createdAt])
@@ -2080,12 +2114,126 @@ model PurchaseOrderLine {
   product                   Product                  @relation(fields: [productId], references: [id], onDelete: Restrict)
   productVariant            ProductVariant?          @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
   supplierProduct           SupplierProduct?         @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  goodsReceiptLines         GoodsReceiptLine[]
 
   @@index([tenantId, purchaseOrderVersionId, displayOrder])
   @@index([purchaseRequisitionLineId])
   @@index([tenantId, productId])
   @@index([productVariantId])
   @@index([supplierProductId])
+}
+
+model GoodsReceipt {
+  id                     String                 @id @default(uuid()) @db.Uuid
+  tenantId               String                 @db.Uuid
+  branchId               String                 @db.Uuid
+  purchaseOrderId        String                 @db.Uuid
+  purchaseOrderVersionId String?                @db.Uuid
+  warehouseId            String                 @db.Uuid
+  receiptNumber          String
+  status                 GoodsReceiptStatus     @default(DRAFT)
+  supplierReference      String?
+  idempotencyKey         String?
+  receivedAt             DateTime?
+  postedAt               DateTime?
+  postedById             String?                @db.Uuid
+  notes                  String?
+  createdById            String?                @db.Uuid
+  updatedById            String?                @db.Uuid
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  tenant                 Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch                 Branch                 @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  purchaseOrder          PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  purchaseOrderVersion   PurchaseOrderVersion?  @relation(fields: [purchaseOrderVersionId], references: [id], onDelete: SetNull)
+  warehouse              InventoryWarehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  lines                  GoodsReceiptLine[]
+  inventoryMovements     InventoryMovement[]
+
+  @@unique([tenantId, receiptNumber])
+  @@unique([tenantId, purchaseOrderId, idempotencyKey])
+  @@index([tenantId, branchId, status, createdAt])
+  @@index([tenantId, purchaseOrderId, createdAt])
+  @@index([warehouseId])
+}
+
+model GoodsReceiptLine {
+  id                  String               @id @default(uuid()) @db.Uuid
+  tenantId            String               @db.Uuid
+  branchId            String               @db.Uuid
+  goodsReceiptId      String               @db.Uuid
+  purchaseOrderLineId String               @db.Uuid
+  productId           String               @db.Uuid
+  productVariantId    String?              @db.Uuid
+  supplierProductId   String?              @db.Uuid
+  receivedQuantity    Decimal              @default(0) @db.Decimal(14, 4)
+  usableQuantity      Decimal              @default(0) @db.Decimal(14, 4)
+  damagedQuantity     Decimal              @default(0) @db.Decimal(14, 4)
+  rejectedQuantity    Decimal              @default(0) @db.Decimal(14, 4)
+  unit                String
+  unitCost            Decimal              @default(0) @db.Decimal(14, 4)
+  notes               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch              Branch               @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  goodsReceipt        GoodsReceipt         @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderLine   PurchaseOrderLine    @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  product             Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productVariant      ProductVariant?      @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  supplierProduct     SupplierProduct?     @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  inventoryMovements  InventoryMovement[]
+
+  @@unique([tenantId, goodsReceiptId, purchaseOrderLineId])
+  @@index([tenantId, branchId])
+  @@index([tenantId, purchaseOrderLineId])
+  @@index([tenantId, productId])
+}
+
+model InventoryMovement {
+  id                    String                     @id @default(uuid()) @db.Uuid
+  tenantId              String                     @db.Uuid
+  branchId              String?                    @db.Uuid
+  warehouseId           String                     @db.Uuid
+  stockBalanceId        String?                    @db.Uuid
+  productId             String                     @db.Uuid
+  productVariantId      String?                    @db.Uuid
+  supplierProductId     String?                    @db.Uuid
+  goodsReceiptId        String?                    @db.Uuid
+  goodsReceiptLineId    String?                    @db.Uuid
+  jobId                 String?                    @db.Uuid
+  materialRequirementId String?                    @db.Uuid
+  type                  InventoryMovementType
+  condition             InventoryMovementCondition @default(USABLE)
+  quantity              Decimal                    @db.Decimal(14, 4)
+  unit                  String
+  unitCost              Decimal                    @default(0) @db.Decimal(14, 4)
+  value                 Decimal                    @default(0) @db.Decimal(14, 4)
+  sourceType            String?
+  sourceId              String?
+  idempotencyKey        String?
+  notes                 String?
+  occurredAt            DateTime                   @default(now())
+  createdById           String?                    @db.Uuid
+  createdAt             DateTime                   @default(now())
+  tenant                Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch                Branch?                    @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  warehouse             InventoryWarehouse         @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  stockBalance          StockBalance?              @relation(fields: [stockBalanceId], references: [id], onDelete: SetNull)
+  product               Product                    @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productVariant        ProductVariant?            @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  supplierProduct       SupplierProduct?           @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  goodsReceipt          GoodsReceipt?              @relation(fields: [goodsReceiptId], references: [id], onDelete: SetNull)
+  goodsReceiptLine      GoodsReceiptLine?          @relation(fields: [goodsReceiptLineId], references: [id], onDelete: SetNull)
+  job                   Job?                       @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  materialRequirement   MaterialRequirement?       @relation(fields: [materialRequirementId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, branchId, occurredAt])
+  @@index([tenantId, warehouseId, productId])
+  @@index([tenantId, goodsReceiptId])
+  @@index([tenantId, jobId])
+  @@index([stockBalanceId])
 }
 
 model SupplierAcknowledgement {
@@ -2181,6 +2329,8 @@ model Product {
   materialRequirements        MaterialRequirement[]
   stockBalances               StockBalance[]
   stockReservations           StockReservation[]
+  goodsReceiptLines           GoodsReceiptLine[]
+  inventoryMovements          InventoryMovement[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, sku])
@@ -2230,6 +2380,8 @@ model ProductVariant {
   materialRequirements     MaterialRequirement[]
   stockBalances            StockBalance[]
   stockReservations        StockReservation[]
+  goodsReceiptLines        GoodsReceiptLine[]
+  inventoryMovements       InventoryMovement[]
 
   @@unique([tenantId, sku])
   @@index([tenantId, productId, lifecycleStatus])

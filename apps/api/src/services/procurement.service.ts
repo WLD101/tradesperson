@@ -6,6 +6,9 @@ import {
 import { hasPermission } from "../../../../packages/auth/src";
 import {
   Prisma,
+  GoodsReceiptStatus,
+  InventoryMovementCondition,
+  InventoryMovementType,
   MaterialRequirementStatus,
   PurchaseOrderDeliveryPlanStatus,
   PurchaseOrderStatus,
@@ -119,6 +122,23 @@ type AcknowledgementInput = {
   notes?: string | null | undefined;
 };
 
+type GoodsReceiptLineInput = {
+  purchaseOrderLineId: string;
+  receivedQuantity: number;
+  damagedQuantity?: number | null | undefined;
+  rejectedQuantity?: number | null | undefined;
+  notes?: string | null | undefined;
+};
+
+type CreateGoodsReceiptInput = {
+  warehouseId?: string | null | undefined;
+  supplierReference?: string | null | undefined;
+  idempotencyKey?: string | null | undefined;
+  receivedAt?: Date | null | undefined;
+  notes?: string | null | undefined;
+  lines: GoodsReceiptLineInput[];
+};
+
 type ListQuery = {
   page?: number | undefined;
   pageSize?: number | undefined;
@@ -185,6 +205,43 @@ const PURCHASE_ORDER_SELECT: any = {
   },
   acknowledgements: { orderBy: [{ createdAt: "desc" }] },
   deliveryPlans: { orderBy: [{ expectedDate: "asc" }, { createdAt: "asc" }] },
+  goodsReceipts: {
+    orderBy: [{ createdAt: "desc" }],
+    include: {
+      warehouse: { select: { id: true, code: true, name: true } },
+      lines: {
+        orderBy: [{ createdAt: "asc" }],
+        include: {
+          purchaseOrderLine: { select: { id: true, description: true, quantity: true, unit: true } },
+          product: { select: { id: true, name: true, sku: true } },
+          productVariant: { select: { id: true, name: true, sku: true } },
+          supplierProduct: { select: { id: true, supplierSku: true, supplierDescription: true } },
+        },
+      },
+      inventoryMovements: {
+        orderBy: [{ occurredAt: "asc" }],
+        select: { id: true, type: true, condition: true, quantity: true, unit: true, occurredAt: true },
+      },
+    },
+  },
+};
+
+const GOODS_RECEIPT_INCLUDE: any = {
+  purchaseOrder: { select: { id: true, purchaseOrderNumber: true, status: true, branchId: true } },
+  warehouse: { select: { id: true, code: true, name: true } },
+  lines: {
+    orderBy: [{ createdAt: "asc" }],
+    include: {
+      purchaseOrderLine: { select: { id: true, description: true, quantity: true, unit: true } },
+      product: { select: { id: true, name: true, sku: true } },
+      productVariant: { select: { id: true, name: true, sku: true } },
+      supplierProduct: { select: { id: true, supplierSku: true, supplierDescription: true } },
+    },
+  },
+  inventoryMovements: {
+    orderBy: [{ occurredAt: "asc" }],
+    select: { id: true, type: true, condition: true, quantity: true, unit: true, occurredAt: true },
+  },
 };
 
 @Injectable()
@@ -993,6 +1050,270 @@ export class ProcurementService {
     return this.sanitizeProcurementPayload(updated, session);
   }
 
+  async listGoodsReceipts(session: TenantSession, purchaseOrderId: string) {
+    const order = await this.ensurePurchaseOrder(session, purchaseOrderId);
+    const receipts = await this.prisma.client.goodsReceipt.findMany({
+      where: { tenantId: order.tenantId, purchaseOrderId: order.id },
+      orderBy: [{ createdAt: "desc" }],
+      include: GOODS_RECEIPT_INCLUDE,
+    });
+
+    return this.sanitizeProcurementPayload(receipts, session);
+  }
+
+  async getGoodsReceipt(session: TenantSession, goodsReceiptId: string) {
+    const { tenantId } = this.tenantAccess.ensureTenant(session);
+    const receipt = await this.prisma.client.goodsReceipt.findFirst({
+      where: {
+        id: goodsReceiptId,
+        tenantId,
+        purchaseOrder: this.branchAccess.branchWhere(session, tenantId),
+      },
+      include: GOODS_RECEIPT_INCLUDE,
+    });
+    if (!receipt) {
+      throw new NotFoundException("Resource not found.");
+    }
+
+    return this.sanitizeProcurementPayload(receipt, session);
+  }
+
+  async createGoodsReceipt(
+    session: TenantSession,
+    purchaseOrderId: string,
+    input: CreateGoodsReceiptInput,
+  ) {
+    const idempotencyKey = this.trimOrNull(input.idempotencyKey);
+    const order = await this.ensurePurchaseOrder(session, purchaseOrderId, {
+      include: {
+        versions: {
+          orderBy: { versionNumber: "desc" },
+          take: 1,
+          include: { lines: true },
+        },
+      },
+    });
+
+    if (!["APPROVED", "ISSUED", "ACKNOWLEDGED", "PARTIALLY_FULFILLED"].includes(order.status)) {
+      throw new BadRequestException("Only approved, issued, acknowledged, or partially fulfilled purchase orders can be received.");
+    }
+    if (!order.versions?.[0]?.lines?.length) {
+      throw new BadRequestException("Purchase order is missing receivable lines.");
+    }
+
+    if (idempotencyKey) {
+      const existing = await this.prisma.client.goodsReceipt.findFirst({
+        where: { tenantId: order.tenantId, purchaseOrderId: order.id, idempotencyKey },
+        include: GOODS_RECEIPT_INCLUDE,
+      });
+      if (existing) {
+        return this.sanitizeProcurementPayload(existing, session);
+      }
+    }
+
+    const created: any = await this.prisma.client.$transaction(async (tx) => {
+      const warehouse = await this.resolveReceiptWarehouse(
+        tx,
+        order.tenantId,
+        order.branchId,
+        input.warehouseId ?? null,
+      );
+      const lines = await this.buildGoodsReceiptLines(tx, order, input.lines);
+      const receiptNumber = await this.allocateNumber(tx, order.tenantId, "goods-receipt");
+
+      const receipt = await tx.goodsReceipt.create({
+        data: {
+          tenantId: order.tenantId,
+          branchId: order.branchId,
+          purchaseOrderId: order.id,
+          purchaseOrderVersionId: order.versions[0]!.id,
+          warehouseId: warehouse.id,
+          receiptNumber,
+          supplierReference: this.trimOrNull(input.supplierReference),
+          idempotencyKey,
+          receivedAt: input.receivedAt ?? new Date(),
+          notes: this.trimOrNull(input.notes),
+          createdById: session.user.id,
+          updatedById: session.user.id,
+          lines: {
+            createMany: {
+              data: lines.map((line) => ({
+                tenantId: order.tenantId,
+                branchId: order.branchId,
+                purchaseOrderLineId: line.purchaseOrderLineId,
+                productId: line.productId,
+                productVariantId: line.productVariantId,
+                supplierProductId: line.supplierProductId,
+                receivedQuantity: line.receivedQuantity,
+                usableQuantity: line.usableQuantity,
+                damagedQuantity: line.damagedQuantity,
+                rejectedQuantity: line.rejectedQuantity,
+                unit: line.unit,
+                unitCost: line.unitCost,
+                notes: line.notes,
+              })),
+            },
+          },
+        },
+        include: GOODS_RECEIPT_INCLUDE,
+      });
+
+      return receipt;
+    });
+
+    await this.audit.record({
+      tenantId: order.tenantId,
+      actorUserId: session.user.id,
+      action: "procurement:goods-receipt:create",
+      entityType: "goodsReceipt",
+      entityId: created.id,
+      newValues: {
+        purchaseOrderId: order.id,
+        receiptNumber: created.receiptNumber,
+        lineCount: created.lines.length,
+      },
+    });
+
+    return this.sanitizeProcurementPayload(created, session);
+  }
+
+  async postGoodsReceipt(session: TenantSession, goodsReceiptId: string) {
+    const existing: any = await this.getGoodsReceipt(session, goodsReceiptId);
+    if (existing.status === GoodsReceiptStatus.POSTED) {
+      return existing;
+    }
+    if (existing.status !== GoodsReceiptStatus.DRAFT) {
+      throw new BadRequestException("Only draft goods receipts can be posted.");
+    }
+
+    const posted: any = await this.prisma.client.$transaction(async (tx) => {
+      const receipt = await tx.goodsReceipt.findFirst({
+        where: { id: goodsReceiptId, tenantId: existing.tenantId },
+        include: { lines: { include: { purchaseOrderLine: true } } },
+      });
+      if (!receipt) {
+        throw new NotFoundException("Resource not found.");
+      }
+      if (receipt.status === GoodsReceiptStatus.POSTED) {
+        return tx.goodsReceipt.findUniqueOrThrow({
+          where: { id: receipt.id },
+          include: GOODS_RECEIPT_INCLUDE,
+        });
+      }
+
+      await this.assertReceiptStillWithinOrder(tx, receipt);
+
+      for (const line of receipt.lines) {
+        const movementBase = {
+          tenantId: receipt.tenantId,
+          branchId: receipt.branchId,
+          warehouseId: receipt.warehouseId,
+          productId: line.productId,
+          productVariantId: line.productVariantId,
+          supplierProductId: line.supplierProductId,
+          goodsReceiptId: receipt.id,
+          goodsReceiptLineId: line.id,
+          type: InventoryMovementType.GOODS_RECEIPT,
+          unit: line.unit,
+          unitCost: line.unitCost,
+          sourceType: "goods-receipt-line",
+          sourceId: line.id,
+          createdById: session.user.id,
+        };
+
+        let stockBalanceId: string | null = null;
+        if (this.money(line.usableQuantity).greaterThan(0)) {
+          const balance = await this.incrementStockBalance(
+            tx,
+            receipt.tenantId,
+            receipt.branchId,
+            receipt.warehouseId,
+            line,
+          );
+          stockBalanceId = balance.id;
+          await tx.inventoryMovement.create({
+            data: {
+              ...movementBase,
+              stockBalanceId,
+              condition: InventoryMovementCondition.USABLE,
+              quantity: line.usableQuantity,
+              value: this.money(line.usableQuantity).times(this.money(line.unitCost)),
+              idempotencyKey: `${receipt.id}:${line.id}:usable`,
+            },
+          });
+        }
+
+        if (this.money(line.damagedQuantity).greaterThan(0)) {
+          await tx.inventoryMovement.create({
+            data: {
+              ...movementBase,
+              stockBalanceId,
+              condition: InventoryMovementCondition.DAMAGED,
+              quantity: line.damagedQuantity,
+              value: this.money(line.damagedQuantity).times(this.money(line.unitCost)),
+              idempotencyKey: `${receipt.id}:${line.id}:damaged`,
+            },
+          });
+        }
+
+        if (this.money(line.rejectedQuantity).greaterThan(0)) {
+          await tx.inventoryMovement.create({
+            data: {
+              ...movementBase,
+              stockBalanceId,
+              condition: InventoryMovementCondition.REJECTED,
+              quantity: line.rejectedQuantity,
+              value: this.money(line.rejectedQuantity).times(this.money(line.unitCost)),
+              idempotencyKey: `${receipt.id}:${line.id}:rejected`,
+            },
+          });
+        }
+
+        if (line.purchaseOrderLine.purchaseRequisitionLineId) {
+          await this.applyReceiptToMaterialRequirement(
+            tx,
+            line.purchaseOrderLine.purchaseRequisitionLineId,
+            this.money(line.usableQuantity),
+          );
+        }
+      }
+
+      await tx.goodsReceipt.update({
+        where: { id: receipt.id },
+        data: {
+          status: GoodsReceiptStatus.POSTED,
+          postedAt: new Date(),
+          postedById: session.user.id,
+          updatedById: session.user.id,
+        },
+      });
+
+      await this.refreshPurchaseOrderReceiptStatus(
+        tx,
+        receipt.tenantId,
+        receipt.purchaseOrderId,
+        receipt.purchaseOrderVersionId,
+      );
+
+      return tx.goodsReceipt.findUniqueOrThrow({
+        where: { id: receipt.id },
+        include: GOODS_RECEIPT_INCLUDE,
+      });
+    });
+
+    await this.audit.record({
+      tenantId: existing.tenantId,
+      actorUserId: session.user.id,
+      action: "procurement:goods-receipt:post",
+      entityType: "goodsReceipt",
+      entityId: existing.id,
+      previousValues: { status: existing.status },
+      newValues: { status: posted.status, movementCount: posted.inventoryMovements.length },
+    });
+
+    return this.sanitizeProcurementPayload(posted, session);
+  }
+
   async createAcknowledgement(
     session: TenantSession,
     purchaseOrderId: string,
@@ -1469,6 +1790,242 @@ export class ProcurementService {
     });
   }
 
+  private async resolveReceiptWarehouse(
+    tx: PrismaTransaction,
+    tenantId: string,
+    branchId: string,
+    warehouseId: string | null,
+  ) {
+    const warehouse = warehouseId
+      ? await tx.inventoryWarehouse.findFirst({
+          where: { id: warehouseId, tenantId, OR: [{ branchId }, { branchId: null }] },
+          select: { id: true, branchId: true },
+        })
+      : await tx.inventoryWarehouse.findFirst({
+          where: { tenantId, OR: [{ branchId }, { branchId: null }] },
+          orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+          select: { id: true, branchId: true },
+        });
+
+    if (!warehouse) {
+      throw new BadRequestException("A receivable warehouse is required before posting goods receipts.");
+    }
+
+    return warehouse;
+  }
+
+  private async buildGoodsReceiptLines(
+    tx: PrismaTransaction,
+    order: any,
+    inputLines: GoodsReceiptLineInput[],
+  ) {
+    const currentVersion = order.versions[0];
+    const lineById = new Map(currentVersion.lines.map((line: any) => [line.id, line]));
+    const seen = new Set<string>();
+    const existingPostedLines = await tx.goodsReceiptLine.findMany({
+      where: {
+        tenantId: order.tenantId,
+        purchaseOrderLineId: { in: inputLines.map((line) => line.purchaseOrderLineId) },
+        goodsReceipt: { status: GoodsReceiptStatus.POSTED },
+      },
+      select: { purchaseOrderLineId: true, receivedQuantity: true },
+    });
+    const postedByLineId = new Map<string, Prisma.Decimal>();
+    for (const line of existingPostedLines) {
+      postedByLineId.set(
+        line.purchaseOrderLineId,
+        (postedByLineId.get(line.purchaseOrderLineId) ?? this.money(0)).plus(line.receivedQuantity),
+      );
+    }
+
+    return inputLines.map((input) => {
+      if (seen.has(input.purchaseOrderLineId)) {
+        throw new BadRequestException("Each purchase-order line can only appear once on a receipt.");
+      }
+      seen.add(input.purchaseOrderLineId);
+
+      const purchaseOrderLine: any = lineById.get(input.purchaseOrderLineId);
+      if (!purchaseOrderLine) {
+        throw new BadRequestException("Receipt lines must belong to the current purchase-order version.");
+      }
+
+      const usableQuantity = this.money(input.receivedQuantity);
+      const damagedQuantity = this.money(input.damagedQuantity ?? 0);
+      const rejectedQuantity = this.money(input.rejectedQuantity ?? 0);
+      if (usableQuantity.lessThan(0) || damagedQuantity.lessThan(0) || rejectedQuantity.lessThan(0)) {
+        throw new BadRequestException("Receipt quantities cannot be negative.");
+      }
+
+      const receivedQuantity = usableQuantity.plus(damagedQuantity).plus(rejectedQuantity);
+      if (receivedQuantity.lessThanOrEqualTo(0)) {
+        throw new BadRequestException("Each receipt line must receive at least one usable, damaged, or rejected quantity.");
+      }
+
+      const alreadyPosted = postedByLineId.get(input.purchaseOrderLineId) ?? this.money(0);
+      const remaining = this.money(purchaseOrderLine.quantity).minus(alreadyPosted);
+      if (receivedQuantity.greaterThan(remaining)) {
+        throw new BadRequestException("Goods receipt quantity cannot exceed the remaining purchase-order quantity.");
+      }
+
+      return {
+        purchaseOrderLineId: purchaseOrderLine.id,
+        productId: purchaseOrderLine.productId,
+        productVariantId: purchaseOrderLine.productVariantId,
+        supplierProductId: purchaseOrderLine.supplierProductId,
+        receivedQuantity,
+        usableQuantity,
+        damagedQuantity,
+        rejectedQuantity,
+        unit: purchaseOrderLine.unit,
+        unitCost: this.money(purchaseOrderLine.unitCost),
+        notes: this.trimOrNull(input.notes),
+      };
+    });
+  }
+
+  private async assertReceiptStillWithinOrder(tx: PrismaTransaction, receipt: any) {
+    const lineIds = receipt.lines.map((line: any) => line.purchaseOrderLineId);
+    const postedLines = await tx.goodsReceiptLine.findMany({
+      where: {
+        tenantId: receipt.tenantId,
+        purchaseOrderLineId: { in: lineIds },
+        goodsReceipt: { status: GoodsReceiptStatus.POSTED },
+      },
+      select: { purchaseOrderLineId: true, receivedQuantity: true },
+    });
+    const postedByLineId = new Map<string, Prisma.Decimal>();
+    for (const line of postedLines) {
+      postedByLineId.set(
+        line.purchaseOrderLineId,
+        (postedByLineId.get(line.purchaseOrderLineId) ?? this.money(0)).plus(line.receivedQuantity),
+      );
+    }
+
+    for (const line of receipt.lines) {
+      const totalAfterPost = (postedByLineId.get(line.purchaseOrderLineId) ?? this.money(0)).plus(
+        line.receivedQuantity,
+      );
+      if (totalAfterPost.greaterThan(this.money(line.purchaseOrderLine.quantity))) {
+        throw new BadRequestException("Posting this receipt would over-receive a purchase-order line.");
+      }
+    }
+  }
+
+  private async incrementStockBalance(
+    tx: PrismaTransaction,
+    tenantId: string,
+    branchId: string,
+    warehouseId: string,
+    line: any,
+  ) {
+    const existing = await tx.stockBalance.findFirst({
+      where: {
+        tenantId,
+        warehouseId,
+        productId: line.productId,
+        productVariantId: line.productVariantId,
+        supplierProductId: line.supplierProductId,
+      },
+    });
+
+    if (existing) {
+      return tx.stockBalance.update({
+        where: { id: existing.id },
+        data: {
+          unit: line.unit,
+          onHandQuantity: { increment: line.usableQuantity },
+        },
+      });
+    }
+
+    return tx.stockBalance.create({
+      data: {
+        tenantId,
+        branchId,
+        warehouseId,
+        productId: line.productId,
+        productVariantId: line.productVariantId,
+        supplierProductId: line.supplierProductId,
+        unit: line.unit,
+        onHandQuantity: line.usableQuantity,
+      },
+    });
+  }
+
+  private async applyReceiptToMaterialRequirement(
+    tx: PrismaTransaction,
+    purchaseRequisitionLineId: string,
+    usableQuantity: Prisma.Decimal,
+  ) {
+    if (usableQuantity.lessThanOrEqualTo(0)) {
+      return;
+    }
+
+    const requirement = await tx.materialRequirement.findUnique({
+      where: { purchaseRequisitionLineId },
+    });
+    if (!requirement) {
+      return;
+    }
+
+    const receivedQuantity = this.money(requirement.receivedQuantity).plus(usableQuantity);
+    const status = receivedQuantity.greaterThanOrEqualTo(this.money(requirement.requiredQuantity))
+      ? MaterialRequirementStatus.RECEIVED
+      : MaterialRequirementStatus.PARTIALLY_RECEIVED;
+
+    await tx.materialRequirement.update({
+      where: { id: requirement.id },
+      data: { receivedQuantity, status },
+    });
+  }
+
+  private async refreshPurchaseOrderReceiptStatus(
+    tx: PrismaTransaction,
+    tenantId: string,
+    purchaseOrderId: string,
+    purchaseOrderVersionId: string | null,
+  ) {
+    if (!purchaseOrderVersionId) {
+      return;
+    }
+
+    const lines = await tx.purchaseOrderLine.findMany({
+      where: { tenantId, purchaseOrderVersionId },
+      select: { id: true, quantity: true },
+    });
+    const receiptLines = await tx.goodsReceiptLine.findMany({
+      where: {
+        tenantId,
+        purchaseOrderLineId: { in: lines.map((line) => line.id) },
+        goodsReceipt: { status: GoodsReceiptStatus.POSTED },
+      },
+      select: { purchaseOrderLineId: true, receivedQuantity: true },
+    });
+    const receivedByLineId = new Map<string, Prisma.Decimal>();
+    for (const line of receiptLines) {
+      receivedByLineId.set(
+        line.purchaseOrderLineId,
+        (receivedByLineId.get(line.purchaseOrderLineId) ?? this.money(0)).plus(line.receivedQuantity),
+      );
+    }
+
+    const anyReceived = receiptLines.some((line) => this.money(line.receivedQuantity).greaterThan(0));
+    const allReceived =
+      lines.length > 0 &&
+      lines.every((line) =>
+        (receivedByLineId.get(line.id) ?? this.money(0)).greaterThanOrEqualTo(this.money(line.quantity)),
+      );
+
+    if (anyReceived) {
+      await tx.purchaseOrder.update({
+        where: { id: purchaseOrderId },
+        data: {
+          status: allReceived ? PurchaseOrderStatus.FULFILLED : PurchaseOrderStatus.PARTIALLY_FULFILLED,
+        },
+      });
+    }
+  }
+
   private sanitizeProcurementPayload<T>(payload: T, session: SessionContext): T {
     if (hasPermission(session, "procurement:cost:view")) {
       return payload;
@@ -1659,9 +2216,14 @@ export class ProcurementService {
   private async allocateNumber(
     tx: PrismaTransaction,
     tenantId: string,
-    key: "purchase-requisition" | "purchase-order",
+    key: "purchase-requisition" | "purchase-order" | "goods-receipt",
   ) {
-    const prefix = key === "purchase-requisition" ? "PR" : "PO";
+    const prefixes = {
+      "purchase-requisition": "PR",
+      "purchase-order": "PO",
+      "goods-receipt": "GR",
+    } as const;
+    const prefix = prefixes[key];
     const sql = Prisma.sql`
       INSERT INTO "NumberSequence" ("id", "tenantId", "key", "prefix", "nextValue", "padding", "createdAt", "updatedAt")
       VALUES (gen_random_uuid(), ${tenantId}::uuid, ${key}, ${prefix}, 2, 6, now(), now())

@@ -108,6 +108,23 @@ const acknowledgementSchema = z.object({
   notes: z.preprocess(emptyStringToNull, z.string().max(2000).nullable()).optional(),
 });
 
+const goodsReceiptLineSchema = z.object({
+  purchaseOrderLineId: z.string().uuid(),
+  receivedQuantity: z.coerce.number().nonnegative(),
+  damagedQuantity: z.coerce.number().nonnegative().nullable().optional(),
+  rejectedQuantity: z.coerce.number().nonnegative().nullable().optional(),
+  notes: z.preprocess(emptyStringToNull, z.string().max(1000).nullable()).optional(),
+});
+
+const createGoodsReceiptSchema = z.object({
+  warehouseId: z.preprocess(emptyStringToNull, z.string().uuid().nullable()).optional(),
+  supplierReference: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
+  idempotencyKey: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
+  receivedAt: z.coerce.date().nullable().optional(),
+  notes: z.preprocess(emptyStringToNull, z.string().max(2000).nullable()).optional(),
+  lines: z.array(goodsReceiptLineSchema).min(1),
+});
+
 const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
@@ -351,6 +368,38 @@ class ProcurementController {
       deliveryPlanId,
       deliveryPlanSchema.parse(body),
     );
+  }
+
+  @Get("purchase-orders/:id/goods-receipts")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("procurement:receipt:read")
+  listGoodsReceipts(@Param("id") id: string, @CurrentSession() session: TenantSession) {
+    return this.procurement.listGoodsReceipts(session, id);
+  }
+
+  @Post("purchase-orders/:id/goods-receipts")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("procurement:receipt:create")
+  createGoodsReceipt(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentSession() session: TenantSession,
+  ) {
+    return this.procurement.createGoodsReceipt(session, id, createGoodsReceiptSchema.parse(body));
+  }
+
+  @Get("goods-receipts/:receiptId")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("procurement:receipt:read")
+  getGoodsReceipt(@Param("receiptId") receiptId: string, @CurrentSession() session: TenantSession) {
+    return this.procurement.getGoodsReceipt(session, receiptId);
+  }
+
+  @Post("goods-receipts/:receiptId/post")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("procurement:receipt:post")
+  postGoodsReceipt(@Param("receiptId") receiptId: string, @CurrentSession() session: TenantSession) {
+    return this.procurement.postGoodsReceipt(session, receiptId);
   }
 }
 

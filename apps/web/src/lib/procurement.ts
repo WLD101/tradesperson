@@ -17,6 +17,8 @@ export type PurchaseOrderStatus =
   | "REJECTED"
   | "ISSUED"
   | "ACKNOWLEDGED"
+  | "PARTIALLY_FULFILLED"
+  | "FULFILLED"
   | "CANCELLED";
 export type PurchaseOrderVersionStatus =
   | "DRAFT"
@@ -27,6 +29,8 @@ export type PurchaseOrderVersionStatus =
   | "CANCELLED";
 export type SupplierAcknowledgementStatus = "PENDING" | "ACCEPTED" | "ACCEPTED_WITH_CHANGES" | "REJECTED";
 export type PurchaseOrderDeliveryPlanStatus = "PLANNED" | "CONFIRMED" | "DELAYED" | "CANCELLED" | "COMPLETED";
+export type GoodsReceiptStatus = "DRAFT" | "POSTED" | "CANCELLED";
+export type InventoryMovementCondition = "USABLE" | "DAMAGED" | "REJECTED";
 
 // Base Models
 export type PurchaseRequisitionLine = {
@@ -164,6 +168,49 @@ export type PurchaseOrderDeliveryPlan = {
   createdAt: string;
 };
 
+export type GoodsReceiptLine = {
+  id: string;
+  purchaseOrderLineId: string;
+  productId: string;
+  productVariantId: string | null;
+  supplierProductId: string | null;
+  receivedQuantity: string;
+  usableQuantity: string;
+  damagedQuantity: string;
+  rejectedQuantity: string;
+  unit: string;
+  unitCost: string;
+  notes: string | null;
+  product?: { id: string; name: string; sku: string } | null;
+  productVariant?: { id: string; name: string; sku: string } | null;
+  supplierProduct?: { id: string; supplierSku: string; supplierDescription: string | null } | null;
+  purchaseOrderLine?: { id: string; description: string; quantity: string; unit: string } | null;
+};
+
+export type GoodsReceipt = {
+  id: string;
+  purchaseOrderId: string;
+  purchaseOrderVersionId: string | null;
+  warehouseId: string;
+  receiptNumber: string;
+  status: GoodsReceiptStatus;
+  supplierReference: string | null;
+  receivedAt: string | null;
+  postedAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  warehouse?: { id: string; code: string; name: string } | null;
+  lines: GoodsReceiptLine[];
+  inventoryMovements: Array<{
+    id: string;
+    type: string;
+    condition: InventoryMovementCondition;
+    quantity: string;
+    unit: string;
+    occurredAt: string;
+  }>;
+};
+
 export type PurchaseOrder = {
   id: string;
   branchId: string;
@@ -205,6 +252,7 @@ export type PurchaseOrder = {
   versions: PurchaseOrderVersion[];
   acknowledgements: SupplierAcknowledgement[];
   deliveryPlans: PurchaseOrderDeliveryPlan[];
+  goodsReceipts: GoodsReceipt[];
 };
 
 // Lists
@@ -285,6 +333,9 @@ export function getProcurementPermissions(session: SessionContext | null) {
       canOverrideCost: false,
       canManageAcknowledgement: false,
       canManageDeliveryPlan: false,
+      canViewReceipt: false,
+      canCreateReceipt: false,
+      canPostReceipt: false,
     };
   }
 
@@ -310,5 +361,8 @@ export function getProcurementPermissions(session: SessionContext | null) {
     canOverrideCost: membershipHasPermission("procurement:cost:override"),
     canManageAcknowledgement: membershipHasPermission("procurement:acknowledgement:write"),
     canManageDeliveryPlan: membershipHasPermission("procurement:delivery-plan:write"),
+    canViewReceipt: membershipHasPermission("procurement:receipt:read"),
+    canCreateReceipt: membershipHasPermission("procurement:receipt:create"),
+    canPostReceipt: membershipHasPermission("procurement:receipt:post"),
   };
 }

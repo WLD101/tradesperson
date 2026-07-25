@@ -4,7 +4,8 @@ import type {
   PurchaseOrder, 
   PurchaseOrderVersion,
   SupplierAcknowledgement,
-  PurchaseOrderDeliveryPlan 
+  PurchaseOrderDeliveryPlan,
+  GoodsReceipt,
 } from "./procurement";
 
 // Requisitions
@@ -102,6 +103,19 @@ export async function cancelPurchaseOrder(id: string) {
 
 export async function createPurchaseOrderVersion(id: string) {
   return clientApiFetch<PurchaseOrderVersion>(`/api/v1/purchase-orders/${id}/new-version`, {
+    method: "POST",
+  });
+}
+
+export async function createGoodsReceipt(poId: string, payload: unknown) {
+  return clientApiFetch<GoodsReceipt>(`/api/v1/purchase-orders/${poId}/goods-receipts`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function postGoodsReceipt(receiptId: string) {
+  return clientApiFetch<GoodsReceipt>(`/api/v1/goods-receipts/${receiptId}/post`, {
     method: "POST",
   });
 }

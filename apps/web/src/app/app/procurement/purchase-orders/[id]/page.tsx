@@ -17,6 +17,8 @@ const getStatusColor = (status: string) => {
   if (status === "DRAFT") return "slate";
   if (status === "PENDING_APPROVAL") return "amber";
   if (status === "APPROVED") return "green";
+  if (status === "FULFILLED") return "green";
+  if (status === "PARTIALLY_FULFILLED") return "amber";
   if (status === "ISSUED" || status === "ACKNOWLEDGED") return "blue";
   if (status === "REJECTED" || status === "CANCELLED") return "red";
   return "slate";
@@ -152,6 +154,8 @@ export default async function PurchaseOrderDetailPage({
               canIssuePo: permissions.canIssuePo,
               canManageAcknowledgement: permissions.canManageAcknowledgement,
               canManageDeliveryPlan: permissions.canManageDeliveryPlan,
+              canCreateReceipt: permissions.canCreateReceipt,
+              canPostReceipt: permissions.canPostReceipt,
             }}
           />
         </div>

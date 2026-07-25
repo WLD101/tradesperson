@@ -11,10 +11,12 @@ import type {
 import {
   approvePurchaseOrder,
   cancelPurchaseOrder,
+  createGoodsReceipt,
   createDeliveryPlan,
   createPurchaseOrderVersion,
   createSupplierAcknowledgement,
   issuePurchaseOrder,
+  postGoodsReceipt,
   rejectPurchaseOrder,
   submitPurchaseOrder,
   updateDeliveryPlan,
@@ -30,6 +32,8 @@ type Props = {
     canIssuePo: boolean;
     canManageAcknowledgement: boolean;
     canManageDeliveryPlan: boolean;
+    canCreateReceipt: boolean;
+    canPostReceipt: boolean;
   };
 };
 
@@ -207,6 +211,253 @@ export function PurchaseOrderWorkflow({ purchaseOrder, permissions }: Props) {
         onError={setError}
         onSuccess={refresh}
       />
+
+      <GoodsReceiptsPanel
+        purchaseOrder={purchaseOrder}
+        canCreate={permissions.canCreateReceipt}
+        canPost={permissions.canPostReceipt}
+        onError={setError}
+        onSuccess={refresh}
+      />
+    </div>
+  );
+}
+
+function GoodsReceiptsPanel({
+  purchaseOrder,
+  canCreate,
+  canPost,
+  onError,
+  onSuccess,
+}: {
+  purchaseOrder: PurchaseOrder;
+  canCreate: boolean;
+  canPost: boolean;
+  onError: (value: string | null) => void;
+  onSuccess: () => void;
+}) {
+  const currentVersion = purchaseOrder.versions[0];
+  const [supplierReference, setSupplierReference] = useState("");
+  const [notes, setNotes] = useState("");
+  const [quantities, setQuantities] = useState<Record<string, { received: string; damaged: string; rejected: string }>>(
+    () =>
+      Object.fromEntries(
+        (currentVersion?.lines ?? []).map((line) => [
+          line.id,
+          { received: remainingQuantity(purchaseOrder, line.id, Number.parseFloat(line.quantity)).toString(), damaged: "0", rejected: "0" },
+        ]),
+      ),
+  );
+  const [saving, setSaving] = useState(false);
+  const [postingId, setPostingId] = useState<string | null>(null);
+
+  const canReceive =
+    canCreate &&
+    currentVersion &&
+    ["APPROVED", "ISSUED", "ACKNOWLEDGED", "PARTIALLY_FULFILLED"].includes(purchaseOrder.status);
+
+  const handleQuantity = (
+    lineId: string,
+    key: "received" | "damaged" | "rejected",
+    value: string,
+  ) => {
+    setQuantities((current) => ({
+      ...current,
+      [lineId]: { ...(current[lineId] ?? { received: "0", damaged: "0", rejected: "0" }), [key]: value },
+    }));
+  };
+
+  const handleCreate = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!currentVersion) return;
+
+    const lines = currentVersion.lines
+      .map((line) => {
+        const qty = quantities[line.id] ?? { received: "0", damaged: "0", rejected: "0" };
+        return {
+          purchaseOrderLineId: line.id,
+          receivedQuantity: Number.parseFloat(qty.received || "0"),
+          damagedQuantity: Number.parseFloat(qty.damaged || "0"),
+          rejectedQuantity: Number.parseFloat(qty.rejected || "0"),
+        };
+      })
+      .filter((line) => line.receivedQuantity + line.damagedQuantity + line.rejectedQuantity > 0);
+
+    if (lines.length === 0) {
+      onError("Enter at least one quantity to receive.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      onError(null);
+      await createGoodsReceipt(purchaseOrder.id, {
+        supplierReference: supplierReference || null,
+        idempotencyKey: `web-${purchaseOrder.id}-${Date.now()}`,
+        notes: notes || null,
+        lines,
+      });
+      setSupplierReference("");
+      setNotes("");
+      onSuccess();
+    } catch (err: unknown) {
+      onError(err instanceof Error ? err.message : "Failed to create goods receipt.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePost = async (receiptId: string) => {
+    if (!window.confirm("Post this goods receipt into stock? This creates immutable inventory movements.")) {
+      return;
+    }
+    try {
+      setPostingId(receiptId);
+      onError(null);
+      await postGoodsReceipt(receiptId);
+      onSuccess();
+    } catch (err: unknown) {
+      onError(err instanceof Error ? err.message : "Failed to post goods receipt.");
+    } finally {
+      setPostingId(null);
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">Goods Receipts</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Receive usable stock, quarantine damaged goods, and post immutable stock movements.
+          </p>
+        </div>
+        <StatusBadge status={purchaseOrder.status} color={statusColor(purchaseOrder.status)} />
+      </div>
+
+      {canReceive && currentVersion ? (
+        <form onSubmit={handleCreate} className="mt-5 space-y-4 border-t border-slate-200 pt-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Supplier reference</label>
+              <input
+                type="text"
+                className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={supplierReference}
+                onChange={(event) => setSupplierReference(event.target.value)}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">Receipt notes</label>
+              <input
+                type="text"
+                className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                value={notes}
+                onChange={(event) => setNotes(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-200 text-sm">
+              <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-3 py-2">Item</th>
+                  <th className="px-3 py-2">Ordered</th>
+                  <th className="px-3 py-2">Remaining</th>
+                  <th className="px-3 py-2">Usable</th>
+                  <th className="px-3 py-2">Damaged</th>
+                  <th className="px-3 py-2">Rejected</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {currentVersion.lines.map((line) => {
+                  const remaining = remainingQuantity(purchaseOrder, line.id, Number.parseFloat(line.quantity));
+                  const value = quantities[line.id] ?? { received: "0", damaged: "0", rejected: "0" };
+                  return (
+                    <tr key={line.id}>
+                      <td className="px-3 py-2 font-medium text-slate-900">{line.description}</td>
+                      <td className="px-3 py-2 text-slate-600">{line.quantity} {line.unit}</td>
+                      <td className="px-3 py-2 text-slate-600">{remaining.toFixed(4)} {line.unit}</td>
+                      {(["received", "damaged", "rejected"] as const).map((key) => (
+                        <td key={key} className="px-3 py-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.0001"
+                            className="w-24 rounded-md border border-slate-300 px-2 py-1"
+                            value={value[key]}
+                            onChange={(event) => handleQuantity(line.id, key, event.target.value)}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800 disabled:opacity-50"
+          >
+            {saving ? "Creating receipt..." : "Create Draft Receipt"}
+          </button>
+        </form>
+      ) : (
+        <p className="mt-4 rounded-md bg-slate-50 p-3 text-sm text-slate-500">
+          Receipts can be created after the purchase order is approved or issued.
+        </p>
+      )}
+
+      <div className="mt-5 space-y-3">
+        {purchaseOrder.goodsReceipts.length === 0 ? (
+          <p className="text-sm text-slate-500">No goods receipts recorded yet.</p>
+        ) : (
+          purchaseOrder.goodsReceipts.map((receipt) => (
+            <div key={receipt.id} className="rounded-lg border border-slate-200 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-medium text-slate-900">{receipt.receiptNumber}</p>
+                  <p className="text-sm text-slate-500">
+                    {receipt.warehouse?.name ?? "Warehouse"} · received <DateDisplay date={receipt.receivedAt} />
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={receipt.status} color={statusColor(receipt.status)} />
+                  {receipt.status === "DRAFT" && canPost ? (
+                    <button
+                      type="button"
+                      onClick={() => handlePost(receipt.id)}
+                      disabled={postingId !== null}
+                      className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {postingId === receipt.id ? "Posting..." : "Post"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 text-sm text-slate-600 md:grid-cols-3">
+                <p>Lines: <span className="font-medium text-slate-900">{receipt.lines.length}</span></p>
+                <p>Movements: <span className="font-medium text-slate-900">{receipt.inventoryMovements.length}</span></p>
+                <p>Posted: <span className="font-medium text-slate-900"><DateDisplay date={receipt.postedAt} /></span></p>
+              </div>
+              <div className="mt-3 space-y-1 text-sm text-slate-600">
+                {receipt.lines.map((line) => (
+                  <p key={line.id}>
+                    {line.product?.name ?? line.purchaseOrderLine?.description ?? "Receipt line"}:{" "}
+                    <span className="text-slate-900">{line.usableQuantity} usable</span>,{" "}
+                    <span>{line.damagedQuantity} damaged</span>,{" "}
+                    <span>{line.rejectedQuantity} rejected</span>
+                  </p>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -529,6 +780,12 @@ function statusColor(status: string) {
   if (status === "APPROVED" || status === "ACCEPTED" || status === "CONFIRMED" || status === "COMPLETED") {
     return "green";
   }
+  if (status === "POSTED" || status === "FULFILLED") {
+    return "green";
+  }
+  if (status === "PARTIALLY_FULFILLED") {
+    return "amber";
+  }
   if (status === "ISSUED" || status === "ACKNOWLEDGED" || status === "ACCEPTED_WITH_CHANGES") {
     return "blue";
   }
@@ -543,4 +800,14 @@ function toDateInput(value: string | null | undefined) {
     return "";
   }
   return new Date(value).toISOString().split("T")[0] ?? "";
+}
+
+function remainingQuantity(purchaseOrder: PurchaseOrder, lineId: string, orderedQuantity: number) {
+  const receivedQuantity = purchaseOrder.goodsReceipts
+    .filter((receipt) => receipt.status === "POSTED")
+    .flatMap((receipt) => receipt.lines)
+    .filter((line) => line.purchaseOrderLineId === lineId)
+    .reduce((total, line) => total + Number.parseFloat(line.receivedQuantity), 0);
+
+  return Math.max(0, orderedQuantity - receivedQuantity);
 }

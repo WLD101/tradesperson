@@ -1,0 +1,5 @@
+-- RenameIndex
+ALTER INDEX "GoodsReceiptLine_tenantId_goodsReceiptId_purchaseOrderLineId_ke" RENAME TO "GoodsReceiptLine_tenantId_goodsReceiptId_purchaseOrderLineI_key";
+
+-- RenameIndex
+ALTER INDEX "StockBalance_tenantId_warehouseId_productId_productVariantId_su" RENAME TO "StockBalance_tenantId_warehouseId_productId_productVariantI_key";

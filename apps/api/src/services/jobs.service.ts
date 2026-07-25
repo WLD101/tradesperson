@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   EstimateLineType,
+  InventoryMovementCondition,
+  InventoryMovementType,
   InvoiceStatus,
   JobStatus,
   MaterialRequirementStatus,
@@ -431,6 +433,28 @@ export class JobsService {
             status: StockReservationStatus.ISSUED,
             issuedById: session.user.id,
             issuedAt: new Date(),
+          },
+        });
+        await tx.inventoryMovement.create({
+          data: {
+            tenantId: job.tenantId,
+            branchId: job.branchId,
+            warehouseId: reservation.warehouseId,
+            stockBalanceId: reservation.stockBalanceId,
+            productId: reservation.productId,
+            productVariantId: reservation.productVariantId,
+            supplierProductId: reservation.supplierProductId,
+            jobId: job.id,
+            materialRequirementId: requirement.id,
+            type: InventoryMovementType.MATERIAL_ISSUE,
+            condition: InventoryMovementCondition.USABLE,
+            quantity: remainingToIssue,
+            unit: reservation.unit,
+            sourceType: "stock-reservation",
+            sourceId: reservation.id,
+            idempotencyKey: `${reservation.id}:issue`,
+            notes: `Issued to ${job.jobNumber}.`,
+            createdById: session.user.id,
           },
         });
 

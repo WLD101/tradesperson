@@ -5,6 +5,7 @@ import { createIsolationFixtures, type IsolationFixtureSet } from './helpers/ten
 import { AuditService } from '../src/services/audit.service';
 import { AuthorizationService } from '../src/services/authorization.service';
 import { BranchAccessService } from '../src/services/branch-access.service';
+import { InventoryService } from '../src/services/inventory.service';
 import { ProcurementService } from '../src/services/procurement.service';
 import { TenantAccessService } from '../src/services/tenant-access.service';
 import type { SessionContext } from '@tradesperson/types';
@@ -12,6 +13,7 @@ import type { SessionContext } from '@tradesperson/types';
 describe.sequential('Procurement DB Tests', () => {
   let fixtures: IsolationFixtureSet;
   let procurement: ProcurementService;
+  let inventory: InventoryService;
   let ownerSession: SessionContext;
 
   beforeAll(async () => {
@@ -32,6 +34,7 @@ describe.sequential('Procurement DB Tests', () => {
       new AuthorizationService(),
       audit,
     );
+    inventory = new InventoryService(prismaService as never, tenantAccess, branchAccess, audit);
     ownerSession = {
       sessionId: 'receipt-test-session',
       user: {
@@ -386,6 +389,20 @@ describe.sequential('Procurement DB Tests', () => {
     expect(balanceAfterFinal.onHandQuantity.toString()).toBe('9');
     expect((await prisma.purchaseOrder.findUniqueOrThrow({ where: { id: order.id } })).status)
       .toBe('FULFILLED');
+    expect((await inventory.reconcileStockBalances(ownerSession)).mismatchCount).toBe(0);
+
+    await prisma.stockBalance.update({
+      where: { id: balanceAfterFinal.id },
+      data: { onHandQuantity: 123, issuedQuantity: 45 },
+    });
+    const mismatchReport = await inventory.reconcileStockBalances(ownerSession);
+    expect(mismatchReport.mismatchCount).toBe(1);
+    expect(mismatchReport.rows[0]!.expectedOnHandQuantity.toString()).toBe('9');
+
+    await inventory.reconcileStockBalances(ownerSession, { apply: true });
+    const repaired = await prisma.stockBalance.findUniqueOrThrow({ where: { id: balanceAfterFinal.id } });
+    expect(repaired.onHandQuantity.toString()).toBe('9');
+    expect(repaired.issuedQuantity.toString()).toBe('0');
     await expect(
       prisma.auditLog.count({
         where: { tenantId: fixtures.tenantA.id, action: { in: ['procurement:goods-receipt:create', 'procurement:goods-receipt:post'] } },

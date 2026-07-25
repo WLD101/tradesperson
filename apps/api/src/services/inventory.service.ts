@@ -42,9 +42,8 @@ export class InventoryService {
         where: {
           tenantId,
           stockBalanceId: balance.id,
-          condition: InventoryMovementCondition.USABLE,
         },
-        select: { type: true, quantity: true },
+        select: { type: true, condition: true, quantity: true },
       });
 
       let expectedOnHand = new Prisma.Decimal(0);
@@ -52,15 +51,21 @@ export class InventoryService {
       for (const movement of movements) {
         const quantity = new Prisma.Decimal(movement.quantity);
         if (
-          movement.type === InventoryMovementType.GOODS_RECEIPT ||
-          movement.type === InventoryMovementType.MATERIAL_RETURN ||
-          movement.type === InventoryMovementType.ADJUSTMENT
+          (movement.type === InventoryMovementType.GOODS_RECEIPT ||
+            movement.type === InventoryMovementType.ADJUSTMENT) &&
+          movement.condition === InventoryMovementCondition.USABLE
         ) {
           expectedOnHand = expectedOnHand.plus(quantity);
         }
         if (movement.type === InventoryMovementType.MATERIAL_ISSUE) {
           expectedOnHand = expectedOnHand.minus(quantity);
           expectedIssued = expectedIssued.plus(quantity);
+        }
+        if (movement.type === InventoryMovementType.MATERIAL_RETURN) {
+          if (movement.condition === InventoryMovementCondition.USABLE) {
+            expectedOnHand = expectedOnHand.plus(quantity);
+          }
+          expectedIssued = expectedIssued.minus(quantity);
         }
       }
 

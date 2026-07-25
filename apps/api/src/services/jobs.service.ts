@@ -52,6 +52,17 @@ const JOB_INCLUDE: any = {
   },
 };
 
+type ReturnStockInput = {
+  idempotencyKey?: string | null | undefined;
+  notes?: string | null | undefined;
+  lines: Array<{
+    stockReservationId: string;
+    usableQuantity?: number | undefined;
+    damagedQuantity?: number | undefined;
+    notes?: string | null | undefined;
+  }>;
+};
+
 @Injectable()
 export class JobsService {
   constructor(
@@ -481,6 +492,158 @@ export class JobsService {
       entityType: "job",
       entityId: job.id,
       newValues: { jobNumber: job.jobNumber },
+    });
+
+    return updated;
+  }
+
+  async returnJobStock(session: TenantSession, jobId: string, input: ReturnStockInput) {
+    const job = await this.ensureJob(session, jobId);
+    const idempotencyKey = this.trimOrNull(input.idempotencyKey);
+
+    if (idempotencyKey) {
+      const existingReturn = await this.prisma.client.inventoryMovement.findFirst({
+        where: {
+          tenantId: job.tenantId,
+          jobId: job.id,
+          type: InventoryMovementType.MATERIAL_RETURN,
+          idempotencyKey: { startsWith: `${idempotencyKey}:` },
+        },
+      });
+      if (existingReturn) {
+        return this.ensureJob(session, job.id, { include: JOB_INCLUDE });
+      }
+    }
+
+    const updated = await this.prisma.client.$transaction(async (tx) => {
+      for (const [index, line] of input.lines.entries()) {
+        const usableQuantity = this.money(line.usableQuantity ?? 0);
+        const damagedQuantity = this.money(line.damagedQuantity ?? 0);
+        const totalQuantity = usableQuantity.plus(damagedQuantity);
+
+        if (usableQuantity.lessThan(0) || damagedQuantity.lessThan(0)) {
+          throw new BadRequestException("Return quantities cannot be negative.");
+        }
+        if (totalQuantity.lessThanOrEqualTo(0)) {
+          throw new BadRequestException("Each return line must include usable or damaged quantity.");
+        }
+
+        const reservation = await tx.stockReservation.findFirst({
+          where: {
+            id: line.stockReservationId,
+            tenantId: job.tenantId,
+            jobId: job.id,
+            status: { in: [StockReservationStatus.PARTIALLY_ISSUED, StockReservationStatus.ISSUED] },
+          },
+          include: { materialRequirement: true },
+        });
+        if (!reservation) {
+          throw new NotFoundException("Resource not found.");
+        }
+
+        const priorReturns = await tx.inventoryMovement.findMany({
+          where: {
+            tenantId: job.tenantId,
+            jobId: job.id,
+            type: InventoryMovementType.MATERIAL_RETURN,
+            sourceType: "stock-reservation",
+            sourceId: reservation.id,
+          },
+          select: { quantity: true },
+        });
+        const alreadyReturned = priorReturns.reduce(
+          (total, movement) => total.plus(movement.quantity),
+          this.money(0),
+        );
+        const remainingReturnable = this.money(reservation.issuedQuantity).minus(alreadyReturned);
+        if (totalQuantity.greaterThan(remainingReturnable)) {
+          throw new BadRequestException("Return quantity cannot exceed the remaining issued quantity.");
+        }
+
+        if (usableQuantity.greaterThan(0)) {
+          await tx.stockBalance.update({
+            where: { id: reservation.stockBalanceId },
+            data: {
+              onHandQuantity: { increment: usableQuantity },
+              issuedQuantity: { decrement: usableQuantity },
+            },
+          });
+          await tx.inventoryMovement.create({
+            data: {
+              tenantId: job.tenantId,
+              branchId: job.branchId,
+              warehouseId: reservation.warehouseId,
+              stockBalanceId: reservation.stockBalanceId,
+              productId: reservation.productId,
+              productVariantId: reservation.productVariantId,
+              supplierProductId: reservation.supplierProductId,
+              jobId: job.id,
+              materialRequirementId: reservation.materialRequirementId,
+              type: InventoryMovementType.MATERIAL_RETURN,
+              condition: InventoryMovementCondition.USABLE,
+              quantity: usableQuantity,
+              unit: reservation.unit,
+              sourceType: "stock-reservation",
+              sourceId: reservation.id,
+              idempotencyKey: idempotencyKey ? `${idempotencyKey}:return:${index}:usable` : null,
+              notes: this.trimOrNull(line.notes) ?? this.trimOrNull(input.notes),
+              createdById: session.user.id,
+            },
+          });
+        }
+
+        if (damagedQuantity.greaterThan(0)) {
+          await tx.stockBalance.update({
+            where: { id: reservation.stockBalanceId },
+            data: { issuedQuantity: { decrement: damagedQuantity } },
+          });
+          await tx.inventoryMovement.create({
+            data: {
+              tenantId: job.tenantId,
+              branchId: job.branchId,
+              warehouseId: reservation.warehouseId,
+              stockBalanceId: reservation.stockBalanceId,
+              productId: reservation.productId,
+              productVariantId: reservation.productVariantId,
+              supplierProductId: reservation.supplierProductId,
+              jobId: job.id,
+              materialRequirementId: reservation.materialRequirementId,
+              type: InventoryMovementType.MATERIAL_RETURN,
+              condition: InventoryMovementCondition.DAMAGED,
+              quantity: damagedQuantity,
+              unit: reservation.unit,
+              sourceType: "stock-reservation",
+              sourceId: reservation.id,
+              idempotencyKey: idempotencyKey ? `${idempotencyKey}:return:${index}:damaged` : null,
+              notes: this.trimOrNull(line.notes) ?? this.trimOrNull(input.notes),
+              createdById: session.user.id,
+            },
+          });
+        }
+
+        const issuedQuantity = this.money(reservation.materialRequirement.issuedQuantity).minus(totalQuantity);
+        await tx.materialRequirement.update({
+          where: { id: reservation.materialRequirementId },
+          data: {
+            issuedQuantity: Prisma.Decimal.max(issuedQuantity, this.money(0)),
+            status: issuedQuantity.greaterThan(0)
+              ? MaterialRequirementStatus.PARTIALLY_ISSUED
+              : MaterialRequirementStatus.ALLOCATED,
+            updatedById: session.user.id,
+          },
+        });
+      }
+
+      return tx.job.findFirstOrThrow({ where: { id: job.id, tenantId: job.tenantId }, include: JOB_INCLUDE });
+    });
+
+    await this.audit.record({
+      tenantId: job.tenantId,
+      actorUserId: session.user.id,
+      action: "job:stock:return",
+      entityType: "job",
+      entityId: job.id,
+      newValues: { lineCount: input.lines.length },
     });
 
     return updated;

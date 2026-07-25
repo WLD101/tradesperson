@@ -60,6 +60,17 @@ const recordPaymentSchema = z.object({
   notes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
 });
 
+const materialReturnSchema = z.object({
+  idempotencyKey: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
+  notes: z.preprocess(emptyStringToNull, z.string().max(1000).nullable()).optional(),
+  lines: z.array(z.object({
+    stockReservationId: z.string().uuid(),
+    usableQuantity: z.coerce.number().nonnegative().optional(),
+    damagedQuantity: z.coerce.number().nonnegative().optional(),
+    notes: z.preprocess(emptyStringToNull, z.string().max(1000).nullable()).optional(),
+  })).min(1),
+});
+
 type TenantSession = Parameters<JobsService["listJobs"]>[0];
 
 @Controller({ version: "1" })
@@ -125,6 +136,17 @@ class JobsController {
   @RequirePermissions("job:write")
   issueReservedStockForJob(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.jobs.issueReservedStockForJob(session, id);
+  }
+
+  @Post("jobs/:id/material-requirements/return-stock")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:write")
+  returnJobStock(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentSession() session: TenantSession,
+  ) {
+    return this.jobs.returnJobStock(session, id, materialReturnSchema.parse(body));
   }
 
   @Post("jobs/:id/schedule")

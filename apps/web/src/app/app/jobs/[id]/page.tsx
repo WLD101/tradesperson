@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Breadcrumbs, DateDisplay, Money, PageHeader, StatusBadge, SummaryStrip } from "@/components/shared";
 import { getSession } from "@/lib/api";
-import { completeJob, createJobInvoice, createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, issueJobStock, recordInvoicePayment, reserveJobStock, scheduleJob } from "@/lib/jobs";
+import { completeJob, createJobInvoice, createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, issueJobStock, recordInvoicePayment, reserveJobStock, returnJobStock, scheduleJob } from "@/lib/jobs";
 
 function statusColor(status: string) {
   if (status === "SCHEDULED") return "blue" as const;
@@ -37,6 +37,23 @@ async function issueStockAction(formData: FormData) {
   const jobId = String(formData.get("jobId") ?? "");
   if (!jobId) return;
   await issueJobStock(jobId);
+}
+
+async function returnStockAction(formData: FormData) {
+  "use server";
+  const jobId = String(formData.get("jobId") ?? "");
+  const stockReservationId = String(formData.get("stockReservationId") ?? "");
+  const usableQuantity = Number(formData.get("usableQuantity") ?? 0);
+  const damagedQuantity = Number(formData.get("damagedQuantity") ?? 0);
+  if (!jobId || !stockReservationId || usableQuantity + damagedQuantity <= 0) return;
+  const idempotencyKey =
+    String(formData.get("idempotencyKey") ?? "") ||
+    `return-${jobId}-${stockReservationId}-${Date.now()}`;
+  await returnJobStock(jobId, {
+    idempotencyKey,
+    notes: String(formData.get("notes") ?? ""),
+    lines: [{ stockReservationId, usableQuantity, damagedQuantity }],
+  });
 }
 
 async function scheduleJobAction(formData: FormData) {
@@ -119,6 +136,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     const reserved = (requirement.stockReservations ?? []).reduce((sum, reservation) => sum + Number(reservation.reservedQuantity) - Number(reservation.issuedQuantity), 0);
     return reserved > 0;
   });
+  const hasIssuedStockToReturn = materialRequirements.some((requirement) =>
+    (requirement.stockReservations ?? []).some((reservation) => Number(reservation.issuedQuantity) > 0),
+  );
 
   return (
     <div className="space-y-6">
@@ -353,6 +373,32 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             </form>
           ) : null}
         </div>
+        {materialRequirements.length && hasIssuedStockToReturn && perms.canWrite ? (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <h3 className="text-sm font-semibold text-amber-950">Return issued material</h3>
+            <p className="mt-1 text-sm text-amber-800">Return usable stock to inventory or record damaged material without making it available for reservation.</p>
+            <div className="mt-3 grid gap-3">
+              {materialRequirements.flatMap((requirement) =>
+                (requirement.stockReservations ?? [])
+                  .filter((reservation) => Number(reservation.issuedQuantity) > 0)
+                  .map((reservation) => (
+                    <form key={reservation.id} action={returnStockAction} className="grid gap-2 rounded-md border border-amber-200 bg-white p-3 md:grid-cols-[1fr_120px_120px_1fr_auto]">
+                      <input name="jobId" type="hidden" value={job.id} />
+                      <input name="stockReservationId" type="hidden" value={reservation.id} />
+                      <div className="text-sm">
+                        <div className="font-medium text-slate-900">{requirement.description}</div>
+                        <div className="text-xs text-slate-500">{reservation.warehouse.code}: issued {Number(reservation.issuedQuantity).toFixed(2)} {reservation.unit}</div>
+                      </div>
+                      <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" name="usableQuantity" type="number" min="0" step="0.0001" placeholder="Usable" />
+                      <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" name="damagedQuantity" type="number" min="0" step="0.0001" placeholder="Damaged" />
+                      <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" name="notes" placeholder="Return note" />
+                      <button className="rounded-md bg-amber-700 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600" type="submit">Return</button>
+                    </form>
+                  )),
+              )}
+            </div>
+          </div>
+        ) : null}
         {materialRequirements.length ? (
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 text-sm">

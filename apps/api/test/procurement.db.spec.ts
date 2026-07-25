@@ -6,6 +6,7 @@ import { AuditService } from '../src/services/audit.service';
 import { AuthorizationService } from '../src/services/authorization.service';
 import { BranchAccessService } from '../src/services/branch-access.service';
 import { InventoryService } from '../src/services/inventory.service';
+import { JobsService } from '../src/services/jobs.service';
 import { ProcurementService } from '../src/services/procurement.service';
 import { TenantAccessService } from '../src/services/tenant-access.service';
 import type { SessionContext } from '@tradesperson/types';
@@ -14,6 +15,7 @@ describe.sequential('Procurement DB Tests', () => {
   let fixtures: IsolationFixtureSet;
   let procurement: ProcurementService;
   let inventory: InventoryService;
+  let jobs: JobsService;
   let ownerSession: SessionContext;
 
   beforeAll(async () => {
@@ -35,6 +37,7 @@ describe.sequential('Procurement DB Tests', () => {
       audit,
     );
     inventory = new InventoryService(prismaService as never, tenantAccess, branchAccess, audit);
+    jobs = new JobsService(prismaService as never, tenantAccess, branchAccess, audit);
     ownerSession = {
       sessionId: 'receipt-test-session',
       user: {
@@ -60,7 +63,7 @@ describe.sequential('Procurement DB Tests', () => {
         },
       ],
     };
-  }, 20000);
+  }, 40000);
 
   afterAll(async () => {
     await disconnectDatabase();
@@ -408,5 +411,120 @@ describe.sequential('Procurement DB Tests', () => {
         where: { tenantId: fixtures.tenantA.id, action: { in: ['procurement:goods-receipt:create', 'procurement:goods-receipt:post'] } },
       }),
     ).resolves.toBeGreaterThanOrEqual(4);
+  });
+
+  it('Job Returns: records usable and damaged returns against issued material', async () => {
+    const warehouse = await prisma.inventoryWarehouse.create({
+      data: {
+        tenantId: fixtures.tenantA.id,
+        branchId: fixtures.branchA1.id,
+        code: 'WH-RETURN-1',
+        name: 'Return warehouse',
+      },
+    });
+    const job = await prisma.job.create({
+      data: {
+        tenantId: fixtures.tenantA.id,
+        branchId: fixtures.branchA1.id,
+        customerId: fixtures.customerA1.id,
+        siteId: fixtures.siteA1.id,
+        jobNumber: 'JOB-RETURN-1',
+        status: 'IN_PROGRESS',
+      },
+    });
+    const requirement = await prisma.materialRequirement.create({
+      data: {
+        tenantId: fixtures.tenantA.id,
+        branchId: fixtures.branchA1.id,
+        jobId: job.id,
+        productId: fixtures.productA.id,
+        supplierProductId: fixtures.supplierProductA.id,
+        status: 'ISSUED',
+        description: 'Issued carpet',
+        requiredQuantity: 5,
+        allocatedQuantity: 5,
+        issuedQuantity: 5,
+        unit: 'SQM',
+      },
+    });
+    const balance = await prisma.stockBalance.create({
+      data: {
+        tenantId: fixtures.tenantA.id,
+        branchId: fixtures.branchA1.id,
+        warehouseId: warehouse.id,
+        productId: fixtures.productA.id,
+        supplierProductId: fixtures.supplierProductA.id,
+        unit: 'SQM',
+        onHandQuantity: 5,
+        issuedQuantity: 5,
+      },
+    });
+    const reservation = await prisma.stockReservation.create({
+      data: {
+        tenantId: fixtures.tenantA.id,
+        branchId: fixtures.branchA1.id,
+        warehouseId: warehouse.id,
+        stockBalanceId: balance.id,
+        jobId: job.id,
+        materialRequirementId: requirement.id,
+        productId: fixtures.productA.id,
+        supplierProductId: fixtures.supplierProductA.id,
+        status: 'ISSUED',
+        reservedQuantity: 5,
+        issuedQuantity: 5,
+        unit: 'SQM',
+      },
+    });
+    await prisma.inventoryMovement.createMany({
+      data: [
+        {
+          tenantId: fixtures.tenantA.id,
+          branchId: fixtures.branchA1.id,
+          warehouseId: warehouse.id,
+          stockBalanceId: balance.id,
+          productId: fixtures.productA.id,
+          supplierProductId: fixtures.supplierProductA.id,
+          type: 'GOODS_RECEIPT',
+          condition: 'USABLE',
+          quantity: 10,
+          unit: 'SQM',
+        },
+        {
+          tenantId: fixtures.tenantA.id,
+          branchId: fixtures.branchA1.id,
+          warehouseId: warehouse.id,
+          stockBalanceId: balance.id,
+          productId: fixtures.productA.id,
+          supplierProductId: fixtures.supplierProductA.id,
+          jobId: job.id,
+          materialRequirementId: requirement.id,
+          type: 'MATERIAL_ISSUE',
+          condition: 'USABLE',
+          quantity: 5,
+          unit: 'SQM',
+          sourceType: 'stock-reservation',
+          sourceId: reservation.id,
+          idempotencyKey: `${reservation.id}:issue`,
+        },
+      ],
+    });
+
+    await jobs.returnJobStock(ownerSession, job.id, {
+      idempotencyKey: 'return-1',
+      lines: [{ stockReservationId: reservation.id, usableQuantity: 2, damagedQuantity: 1 }],
+    });
+
+    const updatedBalance = await prisma.stockBalance.findUniqueOrThrow({ where: { id: balance.id } });
+    expect(updatedBalance.onHandQuantity.toString()).toBe('7');
+    expect(updatedBalance.issuedQuantity.toString()).toBe('2');
+    expect(await prisma.inventoryMovement.count({ where: { type: 'MATERIAL_RETURN', jobId: job.id } })).toBe(2);
+    expect((await prisma.materialRequirement.findUniqueOrThrow({ where: { id: requirement.id } })).issuedQuantity.toString()).toBe('2');
+    expect((await inventory.reconcileStockBalances(ownerSession)).mismatchCount).toBe(0);
+    await expect(
+      jobs.returnJobStock(ownerSession, job.id, {
+        idempotencyKey: 'return-over-1',
+        lines: [{ stockReservationId: reservation.id, usableQuantity: 3 }],
+      }),
+    ).rejects.toThrow(/cannot exceed/i);
   });
 });

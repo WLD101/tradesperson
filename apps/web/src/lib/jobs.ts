@@ -138,6 +138,20 @@ export async function issueJobStock(id: string) {
   });
 }
 
+export async function returnJobStock(
+  id: string,
+  payload: {
+    idempotencyKey?: string;
+    notes?: string;
+    lines: Array<{ stockReservationId: string; usableQuantity?: number; damagedQuantity?: number; notes?: string }>;
+  },
+) {
+  return apiFetch<Job>(`/api/v1/jobs/${id}/material-requirements/return-stock`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function scheduleJob(id: string, payload: { scheduledStart: string; scheduledEnd: string; accessNotes?: string; workNotes?: string }) {
   return apiFetch<Job>(`/api/v1/jobs/${id}/schedule`, {
     method: "POST",

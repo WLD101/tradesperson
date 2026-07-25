@@ -487,6 +487,38 @@ export class JobsService {
     return updated;
   }
 
+  async completeJob(session: TenantSession, jobId: string, input: any) {
+    const job = await this.ensureJob(session, jobId);
+    if (job.status === JobStatus.CANCELLED) {
+      throw new BadRequestException("Cancelled jobs cannot be completed.");
+    }
+
+    const updated = await this.prisma.client.job.update({
+      where: { id: job.id },
+      data: {
+        status: JobStatus.COMPLETED,
+        completedAt: input.completedAt ?? new Date(),
+        completedById: session.user.id,
+        completionNotes: this.trimOrNull(input.completionNotes),
+        customerSignoffName: this.trimOrNull(input.customerSignoffName),
+        updatedById: session.user.id,
+      },
+      include: JOB_INCLUDE,
+    });
+
+    await this.audit.record({
+      tenantId: job.tenantId,
+      actorUserId: session.user.id,
+      action: "job:complete",
+      entityType: "job",
+      entityId: job.id,
+      previousValues: { status: job.status },
+      newValues: { status: updated.status, completedAt: updated.completedAt },
+    });
+
+    return updated;
+  }
+
   private async ensureJob(session: TenantSession, jobId: string, args?: Omit<Prisma.JobFindFirstArgs, "where">): Promise<any> {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const job = await this.prisma.client.job.findFirst({

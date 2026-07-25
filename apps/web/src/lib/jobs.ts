@@ -12,6 +12,9 @@ export type Job = {
   depositPaid: string;
   scheduledStart: string | null;
   scheduledEnd: string | null;
+  completedAt: string | null;
+  completionNotes: string | null;
+  customerSignoffName: string | null;
   accessNotes: string | null;
   workNotes: string | null;
   createdAt: string;
@@ -96,6 +99,13 @@ export async function issueJobStock(id: string) {
 
 export async function scheduleJob(id: string, payload: { scheduledStart: string; scheduledEnd: string; accessNotes?: string; workNotes?: string }) {
   return apiFetch<Job>(`/api/v1/jobs/${id}/schedule`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function completeJob(id: string, payload: { completionNotes?: string; customerSignoffName?: string }) {
+  return apiFetch<Job>(`/api/v1/jobs/${id}/complete`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

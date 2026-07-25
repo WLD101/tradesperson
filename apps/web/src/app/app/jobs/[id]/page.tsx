@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Breadcrumbs, DateDisplay, Money, PageHeader, StatusBadge, SummaryStrip } from "@/components/shared";
 import { getSession } from "@/lib/api";
-import { createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, issueJobStock, reserveJobStock, scheduleJob } from "@/lib/jobs";
+import { completeJob, createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, issueJobStock, reserveJobStock, scheduleJob } from "@/lib/jobs";
 
 function statusColor(status: string) {
   if (status === "SCHEDULED") return "blue" as const;
@@ -53,6 +53,16 @@ async function scheduleJobAction(formData: FormData) {
   });
 }
 
+async function completeJobAction(formData: FormData) {
+  "use server";
+  const jobId = String(formData.get("jobId") ?? "");
+  if (!jobId) return;
+  await completeJob(jobId, {
+    completionNotes: String(formData.get("completionNotes") ?? ""),
+    customerSignoffName: String(formData.get("customerSignoffName") ?? ""),
+  });
+}
+
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) redirect("/sign-in");
@@ -94,6 +104,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           { label: "Quote", value: job.quote ? <Link className="text-blue-600" href={`/app/quotes/${job.quote.id}`}>{job.quote.quoteNumber}</Link> : "-" },
           { label: "Deposit", value: depositComplete ? "Paid" : "Outstanding" },
           { label: "Start", value: <DateDisplay date={job.scheduledStart} /> },
+          { label: "Completed", value: <DateDisplay date={job.completedAt} /> },
           { label: "Total", value: <Money amount={Number(job.totalValue)} currency={job.currency} /> },
         ]}
       />
@@ -144,6 +155,33 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             </div>
           ) : null}
         </form>
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="border-b border-slate-100 pb-2 font-semibold text-slate-950">Completion</h2>
+        {job.status === "COMPLETED" ? (
+          <div className="mt-4 space-y-2 text-sm text-slate-600">
+            <p>Completed <DateDisplay date={job.completedAt} /></p>
+            <p>Customer sign-off: {job.customerSignoffName ?? "-"}</p>
+            {job.completionNotes ? <p className="rounded-md bg-slate-50 p-3">{job.completionNotes}</p> : null}
+          </div>
+        ) : (
+          <form action={completeJobAction} className="mt-4 grid gap-4">
+            <input name="jobId" type="hidden" value={job.id} />
+            <label className="space-y-1 text-sm">
+              <span className="font-medium text-slate-700">Customer sign-off name</span>
+              <input className="w-full rounded-md border border-slate-300 px-3 py-2" name="customerSignoffName" placeholder="Name of customer or site contact" />
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium text-slate-700">Completion notes</span>
+              <textarea className="min-h-24 w-full rounded-md border border-slate-300 px-3 py-2" name="completionNotes" placeholder="Installation complete, rooms checked, waste removed, aftercare explained." />
+            </label>
+            {perms.canWrite ? (
+              <div>
+                <button className="rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-600" type="submit">Mark job complete</button>
+              </div>
+            ) : null}
+          </form>
+        )}
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">

@@ -40,6 +40,12 @@ const scheduleJobSchema = z.object({
   workNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
 });
 
+const completeJobSchema = z.object({
+  completedAt: z.coerce.date().optional(),
+  completionNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
+  customerSignoffName: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
+});
+
 type TenantSession = Parameters<JobsService["listJobs"]>[0];
 
 @Controller({ version: "1" })
@@ -112,6 +118,13 @@ class JobsController {
   @RequirePermissions("job:write")
   scheduleJob(@Param("id") id: string, @Body() body: unknown, @CurrentSession() session: TenantSession) {
     return this.jobs.scheduleJob(session, id, scheduleJobSchema.parse(body));
+  }
+
+  @Post("jobs/:id/complete")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:write")
+  completeJob(@Param("id") id: string, @Body() body: unknown, @CurrentSession() session: TenantSession) {
+    return this.jobs.completeJob(session, id, completeJobSchema.parse(body));
   }
 }
 

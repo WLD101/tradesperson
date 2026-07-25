@@ -33,6 +33,13 @@ const createRequisitionFromRequirementsSchema = z.object({
   internalNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
 });
 
+const scheduleJobSchema = z.object({
+  scheduledStart: z.coerce.date(),
+  scheduledEnd: z.coerce.date(),
+  accessNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
+  workNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
+});
+
 type TenantSession = Parameters<JobsService["listJobs"]>[0];
 
 @Controller({ version: "1" })
@@ -98,6 +105,13 @@ class JobsController {
   @RequirePermissions("job:write")
   issueReservedStockForJob(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.jobs.issueReservedStockForJob(session, id);
+  }
+
+  @Post("jobs/:id/schedule")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:write")
+  scheduleJob(@Param("id") id: string, @Body() body: unknown, @CurrentSession() session: TenantSession) {
+    return this.jobs.scheduleJob(session, id, scheduleJobSchema.parse(body));
   }
 }
 

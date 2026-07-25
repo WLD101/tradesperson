@@ -94,6 +94,13 @@ export async function issueJobStock(id: string) {
   });
 }
 
+export async function scheduleJob(id: string, payload: { scheduledStart: string; scheduledEnd: string; accessNotes?: string; workNotes?: string }) {
+  return apiFetch<Job>(`/api/v1/jobs/${id}/schedule`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function getJobPermissions(session: SessionContext | null) {
   const has = (permission: string) => membershipHasPermission(session, permission);
   return { canRead: has("job:read"), canCreate: has("job:create"), canWrite: has("job:write") };

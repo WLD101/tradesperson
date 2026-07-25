@@ -455,6 +455,38 @@ export class JobsService {
     return updated;
   }
 
+  async scheduleJob(session: TenantSession, jobId: string, input: any) {
+    const job = await this.ensureJob(session, jobId);
+    if (input.scheduledEnd <= input.scheduledStart) {
+      throw new BadRequestException("Scheduled end must be after scheduled start.");
+    }
+
+    const updated = await this.prisma.client.job.update({
+      where: { id: job.id },
+      data: {
+        status: JobStatus.SCHEDULED,
+        scheduledStart: input.scheduledStart,
+        scheduledEnd: input.scheduledEnd,
+        ...(input.accessNotes !== undefined ? { accessNotes: this.trimOrNull(input.accessNotes) } : {}),
+        ...(input.workNotes !== undefined ? { workNotes: this.trimOrNull(input.workNotes) } : {}),
+        updatedById: session.user.id,
+      },
+      include: JOB_INCLUDE,
+    });
+
+    await this.audit.record({
+      tenantId: job.tenantId,
+      actorUserId: session.user.id,
+      action: "job:schedule",
+      entityType: "job",
+      entityId: job.id,
+      previousValues: { scheduledStart: job.scheduledStart, scheduledEnd: job.scheduledEnd },
+      newValues: { scheduledStart: updated.scheduledStart, scheduledEnd: updated.scheduledEnd },
+    });
+
+    return updated;
+  }
+
   private async ensureJob(session: TenantSession, jobId: string, args?: Omit<Prisma.JobFindFirstArgs, "where">): Promise<any> {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const job = await this.prisma.client.job.findFirst({

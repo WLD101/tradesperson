@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Breadcrumbs, DateDisplay, Money, PageHeader, StatusBadge, SummaryStrip } from "@/components/shared";
 import { getSession } from "@/lib/api";
-import { createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, issueJobStock, reserveJobStock } from "@/lib/jobs";
+import { createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, issueJobStock, reserveJobStock, scheduleJob } from "@/lib/jobs";
 
 function statusColor(status: string) {
   if (status === "SCHEDULED") return "blue" as const;
@@ -37,6 +37,20 @@ async function issueStockAction(formData: FormData) {
   const jobId = String(formData.get("jobId") ?? "");
   if (!jobId) return;
   await issueJobStock(jobId);
+}
+
+async function scheduleJobAction(formData: FormData) {
+  "use server";
+  const jobId = String(formData.get("jobId") ?? "");
+  const scheduledStart = String(formData.get("scheduledStart") ?? "");
+  const scheduledEnd = String(formData.get("scheduledEnd") ?? "");
+  if (!jobId || !scheduledStart || !scheduledEnd) return;
+  await scheduleJob(jobId, {
+    scheduledStart,
+    scheduledEnd,
+    accessNotes: String(formData.get("accessNotes") ?? ""),
+    workNotes: String(formData.get("workNotes") ?? ""),
+  });
 }
 
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -104,6 +118,33 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           </dl>
         </section>
       </div>
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="border-b border-slate-100 pb-2 font-semibold text-slate-950">Installation Schedule</h2>
+        <form action={scheduleJobAction} className="mt-4 grid gap-4 md:grid-cols-2">
+          <input name="jobId" type="hidden" value={job.id} />
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Start</span>
+            <input className="w-full rounded-md border border-slate-300 px-3 py-2" name="scheduledStart" type="datetime-local" defaultValue={job.scheduledStart?.slice(0, 16) ?? ""} required />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">End</span>
+            <input className="w-full rounded-md border border-slate-300 px-3 py-2" name="scheduledEnd" type="datetime-local" defaultValue={job.scheduledEnd?.slice(0, 16) ?? ""} required />
+          </label>
+          <label className="space-y-1 text-sm md:col-span-2">
+            <span className="font-medium text-slate-700">Access notes</span>
+            <textarea className="min-h-20 w-full rounded-md border border-slate-300 px-3 py-2" name="accessNotes" defaultValue={job.accessNotes ?? ""} />
+          </label>
+          <label className="space-y-1 text-sm md:col-span-2">
+            <span className="font-medium text-slate-700">Work notes</span>
+            <textarea className="min-h-20 w-full rounded-md border border-slate-300 px-3 py-2" name="workNotes" defaultValue={job.workNotes ?? ""} />
+          </label>
+          {perms.canWrite ? (
+            <div className="md:col-span-2">
+              <button className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700" type="submit">Save schedule</button>
+            </div>
+          ) : null}
+        </form>
+      </section>
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
           <div>

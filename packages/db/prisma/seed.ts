@@ -2035,6 +2035,8 @@ async function main() {
     },
   });
 
+  await prisma.inventoryMovement.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.goodsReceipt.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.stockReservation.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.payment.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.invoice.deleteMany({ where: { tenantId: tenant.id } });
@@ -2495,6 +2497,254 @@ async function main() {
   });
 
   await seedProcurement(prisma, tenant, headOffice, owner, manager);
+
+  const tenantBOwner = await prisma.user.upsert({
+    where: { email: "owner@tenantb-flooring.local" },
+    update: {
+      firstName: "Bianca",
+      lastName: "Builder",
+      passwordHash: ownerPassword,
+      status: "ACTIVE",
+    },
+    create: {
+      email: "owner@tenantb-flooring.local",
+      firstName: "Bianca",
+      lastName: "Builder",
+      passwordHash: ownerPassword,
+    },
+  });
+  const tenantB = await prisma.tenant.upsert({
+    where: { slug: "tenant-b-flooring" },
+    update: {
+      name: "Tenant B Flooring Ltd",
+      legalName: "Tenant B Flooring Ltd",
+      tradingName: "Tenant B Flooring",
+      businessEmail: "hello@tenantb-flooring.local",
+      city: "Birmingham",
+      postcode: "B1 1BB",
+    },
+    create: {
+      name: "Tenant B Flooring Ltd",
+      slug: "tenant-b-flooring",
+      legalName: "Tenant B Flooring Ltd",
+      tradingName: "Tenant B Flooring",
+      businessEmail: "hello@tenantb-flooring.local",
+      city: "Birmingham",
+      postcode: "B1 1BB",
+    },
+  });
+  const tenantBBranch = await prisma.branch.upsert({
+    where: { tenantId_branchCode: { tenantId: tenantB.id, branchCode: "BIR-HQ" } },
+    update: {
+      name: "Birmingham Head Office",
+      type: "HEAD_OFFICE",
+      isDefault: true,
+      city: "Birmingham",
+      postcode: "B1 1BB",
+    },
+    create: {
+      tenantId: tenantB.id,
+      branchCode: "BIR-HQ",
+      name: "Birmingham Head Office",
+      type: "HEAD_OFFICE",
+      isDefault: true,
+      city: "Birmingham",
+      postcode: "B1 1BB",
+    },
+  });
+  await prisma.tenantSetting.upsert({
+    where: { tenantId: tenantB.id },
+    update: { quoteNumberPrefix: "BQUO", invoiceNumberPrefix: "BIF", jobNumberPrefix: "BJOB" },
+    create: { tenantId: tenantB.id, quoteNumberPrefix: "BQUO", invoiceNumberPrefix: "BIF", jobNumberPrefix: "BJOB" },
+  });
+  await prisma.tenantSubscription.upsert({
+    where: { tenantId_planId: { tenantId: tenantB.id, planId: growthPlan.id } },
+    update: { status: SubscriptionStatus.ACTIVE },
+    create: { tenantId: tenantB.id, planId: growthPlan.id, status: SubscriptionStatus.ACTIVE },
+  });
+  for (const [key, prefix] of [
+    ["estimate", "BEST"],
+    ["quote", "BQUO"],
+    ["invoice", "BIF"],
+    ["job", "BJOB"],
+    ["purchase-requisition", "BPR"],
+    ["purchase-order", "BPO"],
+    ["goods-receipt", "BGR"],
+  ] as const) {
+    await prisma.numberSequence.upsert({
+      where: { tenantId_key: { tenantId: tenantB.id, key } },
+      update: { prefix, nextValue: 1, padding: 6 },
+      create: { tenantId: tenantB.id, key, prefix, nextValue: 1, padding: 6 },
+    });
+  }
+  const tenantBMembership = await prisma.tenantMembership.upsert({
+    where: { tenantId_userId: { tenantId: tenantB.id, userId: tenantBOwner.id } },
+    update: { status: "ACTIVE", isOwner: true, defaultBranchId: tenantBBranch.id },
+    create: {
+      tenantId: tenantB.id,
+      userId: tenantBOwner.id,
+      status: "ACTIVE",
+      isOwner: true,
+      defaultBranchId: tenantBBranch.id,
+    },
+  });
+  const ownerRole = roleByKey.get("BUSINESS_OWNER");
+  if (ownerRole) {
+    await prisma.membershipRole.deleteMany({ where: { membershipId: tenantBMembership.id } });
+    await prisma.membershipRole.create({ data: { membershipId: tenantBMembership.id, roleId: ownerRole.id } });
+  }
+
+  await prisma.inventoryMovement.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.goodsReceipt.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.stockReservation.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.stockBalance.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.inventoryWarehouse.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.job.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.quoteLine.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.quote.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.estimateLine.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.estimate.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.site.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.customer.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.supplierPriceImportMapping.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.supplierPriceImportRow.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.supplierPriceImport.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.supplierProductPriceHistory.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.supplierProductPrice.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.supplierPriceListVersion.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.supplierPriceList.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.supplierContact.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.supplierProduct.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.supplier.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.productAttributeValue.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.productDocument.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.productImage.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.productVariant.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.product.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.unitOfMeasure.deleteMany({ where: { tenantId: tenantB.id } });
+  await prisma.productCategory.deleteMany({ where: { tenantId: tenantB.id } });
+
+  const tenantBUnit = await prisma.unitOfMeasure.create({
+    data: { tenantId: tenantB.id, code: "SQM", name: "Square metre", symbol: "m2", kind: "SQM" },
+  });
+  const tenantBCategory = await prisma.productCategory.create({
+    data: { tenantId: tenantB.id, name: "Luxury Vinyl Tile", slug: "tenant-b-lvt", status: "ACTIVE" },
+  });
+  const tenantBProduct = await prisma.product.create({
+    data: {
+      tenantId: tenantB.id,
+      categoryId: tenantBCategory.id,
+      primaryUnitId: tenantBUnit.id,
+      name: "Tenant B Oak LVT",
+      slug: "tenant-b-oak-lvt",
+      sku: "TB-LVT-OAK",
+      material: "LVT",
+      lifecycleStatus: "ACTIVE",
+      createdById: tenantBOwner.id,
+      updatedById: tenantBOwner.id,
+    },
+  });
+  const tenantBSupplier = await prisma.supplier.create({
+    data: {
+      tenantId: tenantB.id,
+      branchId: tenantBBranch.id,
+      legalName: "Tenant B Floors Supply Ltd",
+      tradingName: "B Floors Supply",
+      supplierCode: "BFS",
+      email: "orders@bfloors.local",
+      status: "ACTIVE",
+      createdById: tenantBOwner.id,
+      updatedById: tenantBOwner.id,
+    },
+  });
+  const tenantBSupplierProduct = await prisma.supplierProduct.create({
+    data: {
+      tenantId: tenantB.id,
+      supplierId: tenantBSupplier.id,
+      productId: tenantBProduct.id,
+      supplierUnitId: tenantBUnit.id,
+      supplierSku: "BFS-LVT-OAK",
+      supplierDescription: "Tenant B oak LVT plank",
+      status: "ACTIVE",
+      createdById: tenantBOwner.id,
+      updatedById: tenantBOwner.id,
+    },
+  });
+  const tenantBCustomer = await prisma.customer.create({
+    data: {
+      tenantId: tenantB.id,
+      branchId: tenantBBranch.id,
+      customerType: "COMMERCIAL",
+      displayName: "Birmingham Dental Studio",
+      primaryEmail: "facilities@bham-dental.local",
+      primaryPhone: "+44 121 555 0200",
+    },
+  });
+  const tenantBSite = await prisma.site.create({
+    data: {
+      tenantId: tenantB.id,
+      branchId: tenantBBranch.id,
+      customerId: tenantBCustomer.id,
+      label: "Dental Studio Reception",
+      siteType: "COMMERCIAL",
+      addressLine1: "22 Colmore Row",
+      city: "Birmingham",
+      postcode: "B3 2AA",
+      countryCode: "GB",
+    },
+  });
+  const tenantBWarehouse = await prisma.inventoryWarehouse.create({
+    data: {
+      tenantId: tenantB.id,
+      branchId: tenantBBranch.id,
+      code: "B-MAIN",
+      name: "Tenant B main stock",
+      isDefault: true,
+    },
+  });
+  await prisma.stockBalance.create({
+    data: {
+      tenantId: tenantB.id,
+      branchId: tenantBBranch.id,
+      warehouseId: tenantBWarehouse.id,
+      productId: tenantBProduct.id,
+      supplierProductId: tenantBSupplierProduct.id,
+      unit: "SQM",
+      onHandQuantity: "18.0000",
+    },
+  });
+  const tenantBJob = await prisma.job.create({
+    data: {
+      tenantId: tenantB.id,
+      branchId: tenantBBranch.id,
+      customerId: tenantBCustomer.id,
+      siteId: tenantBSite.id,
+      jobNumber: "BJOB-2026-000001",
+      status: "SCHEDULED",
+      title: "Tenant B dental studio LVT repair",
+      totalValue: "860.0000",
+      scheduledStart: new Date("2026-08-12T09:00:00.000Z"),
+      scheduledEnd: new Date("2026-08-12T13:00:00.000Z"),
+      createdById: tenantBOwner.id,
+      updatedById: tenantBOwner.id,
+    },
+  });
+  await prisma.materialRequirement.create({
+    data: {
+      tenantId: tenantB.id,
+      branchId: tenantBBranch.id,
+      jobId: tenantBJob.id,
+      productId: tenantBProduct.id,
+      supplierProductId: tenantBSupplierProduct.id,
+      description: "Tenant B oak LVT replacement",
+      requiredQuantity: "12.0000",
+      receivedQuantity: "12.0000",
+      unit: "SQM",
+      requiredDate: tenantBJob.scheduledStart,
+      createdById: tenantBOwner.id,
+      updatedById: tenantBOwner.id,
+    },
+  });
 }
 
 main()

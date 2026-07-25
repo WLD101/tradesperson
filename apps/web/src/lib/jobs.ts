@@ -31,6 +31,7 @@ export type MaterialRequirement = {
   orderedQuantity: string;
   receivedQuantity: string;
   allocatedQuantity: string;
+  issuedQuantity: string;
   unit: string;
   requiredDate: string | null;
   notes: string | null;
@@ -81,6 +82,13 @@ export async function createJobMaterialRequisition(id: string) {
 
 export async function reserveJobStock(id: string) {
   return apiFetch<Job>(`/api/v1/jobs/${id}/material-requirements/reserve-stock`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function issueJobStock(id: string) {
+  return apiFetch<Job>(`/api/v1/jobs/${id}/material-requirements/issue-stock`, {
     method: "POST",
     body: JSON.stringify({}),
   });

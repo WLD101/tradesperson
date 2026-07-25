@@ -383,6 +383,78 @@ export class JobsService {
     return reserved;
   }
 
+  async issueReservedStockForJob(session: TenantSession, jobId: string) {
+    const job = await this.ensureJob(session, jobId, {
+      include: {
+        materialRequirements: {
+          include: {
+            stockReservations: {
+              where: { status: { in: [StockReservationStatus.RESERVED, StockReservationStatus.PARTIALLY_ISSUED] } },
+            },
+          },
+          orderBy: [{ createdAt: "asc" }],
+        },
+      },
+    });
+
+    const reservations = job.materialRequirements.flatMap((requirement: any) =>
+      requirement.stockReservations.map((reservation: any) => ({ requirement, reservation })),
+    );
+    if (!reservations.length) {
+      throw new BadRequestException("There is no reserved stock available to issue for this job.");
+    }
+
+    const updated = await this.prisma.client.$transaction(async (tx) => {
+      for (const { requirement, reservation } of reservations) {
+        const remainingToIssue = this.money(reservation.reservedQuantity).minus(this.money(reservation.issuedQuantity));
+        if (remainingToIssue.lessThanOrEqualTo(0)) continue;
+
+        await tx.stockBalance.update({
+          where: { id: reservation.stockBalanceId },
+          data: {
+            onHandQuantity: { decrement: remainingToIssue },
+            reservedQuantity: { decrement: remainingToIssue },
+            issuedQuantity: { increment: remainingToIssue },
+          },
+        });
+        await tx.stockReservation.update({
+          where: { id: reservation.id },
+          data: {
+            issuedQuantity: { increment: remainingToIssue },
+            status: StockReservationStatus.ISSUED,
+            issuedById: session.user.id,
+            issuedAt: new Date(),
+          },
+        });
+
+        const issuedQuantity = this.money(requirement.issuedQuantity).plus(remainingToIssue);
+        await tx.materialRequirement.update({
+          where: { id: requirement.id },
+          data: {
+            issuedQuantity,
+            status: issuedQuantity.greaterThanOrEqualTo(this.money(requirement.requiredQuantity))
+              ? MaterialRequirementStatus.ISSUED
+              : MaterialRequirementStatus.PARTIALLY_ISSUED,
+            updatedById: session.user.id,
+          },
+        });
+      }
+
+      return tx.job.findFirstOrThrow({ where: { id: job.id, tenantId: job.tenantId }, include: JOB_INCLUDE });
+    });
+
+    await this.audit.record({
+      tenantId: job.tenantId,
+      actorUserId: session.user.id,
+      action: "job:stock:issue",
+      entityType: "job",
+      entityId: job.id,
+      newValues: { jobNumber: job.jobNumber },
+    });
+
+    return updated;
+  }
+
   private async ensureJob(session: TenantSession, jobId: string, args?: Omit<Prisma.JobFindFirstArgs, "where">): Promise<any> {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const job = await this.prisma.client.job.findFirst({

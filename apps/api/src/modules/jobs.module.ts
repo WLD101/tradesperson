@@ -92,6 +92,13 @@ class JobsController {
   reserveStockForJob(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     return this.jobs.reserveStockForJob(session, id);
   }
+
+  @Post("jobs/:id/material-requirements/issue-stock")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:write")
+  issueReservedStockForJob(@Param("id") id: string, @CurrentSession() session: TenantSession) {
+    return this.jobs.issueReservedStockForJob(session, id);
+  }
 }
 
 @Module({

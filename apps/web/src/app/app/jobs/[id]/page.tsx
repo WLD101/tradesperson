@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Breadcrumbs, DateDisplay, Money, PageHeader, StatusBadge, SummaryStrip } from "@/components/shared";
 import { getSession } from "@/lib/api";
-import { createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, reserveJobStock } from "@/lib/jobs";
+import { createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, issueJobStock, reserveJobStock } from "@/lib/jobs";
 
 function statusColor(status: string) {
   if (status === "SCHEDULED") return "blue" as const;
@@ -32,6 +32,13 @@ async function reserveStockAction(formData: FormData) {
   await reserveJobStock(jobId);
 }
 
+async function issueStockAction(formData: FormData) {
+  "use server";
+  const jobId = String(formData.get("jobId") ?? "");
+  if (!jobId) return;
+  await issueJobStock(jobId);
+}
+
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) redirect("/sign-in");
@@ -56,6 +63,10 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
     const required = Number(requirement.requiredQuantity);
     const allocated = Number(requirement.allocatedQuantity);
     return required > allocated;
+  });
+  const hasReservedStockToIssue = materialRequirements.some((requirement) => {
+    const reserved = (requirement.stockReservations ?? []).reduce((sum, reservation) => sum + Number(reservation.reservedQuantity) - Number(reservation.issuedQuantity), 0);
+    return reserved > 0;
   });
 
   return (
@@ -123,6 +134,14 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               </button>
             </form>
           ) : null}
+          {materialRequirements.length && hasReservedStockToIssue && perms.canWrite ? (
+            <form action={issueStockAction}>
+              <input name="jobId" type="hidden" value={job.id} />
+              <button className="rounded-md bg-orange-700 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600" type="submit">
+                Issue reserved stock
+              </button>
+            </form>
+          ) : null}
         </div>
         {materialRequirements.length ? (
           <div className="mt-4 overflow-x-auto">
@@ -136,6 +155,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                   <th className="px-4 py-3 text-right">Ordered</th>
                   <th className="px-4 py-3 text-right">Received</th>
                   <th className="px-4 py-3 text-right">Allocated</th>
+                  <th className="px-4 py-3 text-right">Issued</th>
                   <th className="px-4 py-3 text-right">To requisition</th>
                   <th className="px-4 py-3">Warehouse</th>
                   <th className="px-4 py-3">Status</th>
@@ -149,6 +169,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                   const ordered = Number(requirement.orderedQuantity);
                   const received = Number(requirement.receivedQuantity);
                   const allocated = Number(requirement.allocatedQuantity);
+                  const issued = Number(requirement.issuedQuantity);
                   const toRequisition = Math.max(0, required - requisitioned);
                   const reservedSummary = requirement.stockReservations?.filter((reservation) => reservation.status !== "CANCELLED") ?? [];
                   return (
@@ -168,6 +189,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                       <td className="px-4 py-3 text-right">{ordered.toFixed(2)} {requirement.unit}</td>
                       <td className="px-4 py-3 text-right">{received.toFixed(2)} {requirement.unit}</td>
                       <td className="px-4 py-3 text-right">{allocated.toFixed(2)} {requirement.unit}</td>
+                      <td className="px-4 py-3 text-right">{issued.toFixed(2)} {requirement.unit}</td>
                       <td className={toRequisition > 0 ? "px-4 py-3 text-right font-semibold text-amber-700" : "px-4 py-3 text-right text-green-700"}>
                         {toRequisition.toFixed(2)} {requirement.unit}
                       </td>

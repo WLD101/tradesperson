@@ -346,6 +346,8 @@ enum MaterialRequirementStatus {
   RECEIVED
   PARTIALLY_ALLOCATED
   ALLOCATED
+  PARTIALLY_ISSUED
+  ISSUED
   CANCELLED
 }
 
@@ -1733,6 +1735,7 @@ model MaterialRequirement {
   orderedQuantity      Decimal                   @default(0) @db.Decimal(14, 4)
   receivedQuantity     Decimal                   @default(0) @db.Decimal(14, 4)
   allocatedQuantity    Decimal                   @default(0) @db.Decimal(14, 4)
+  issuedQuantity       Decimal                   @default(0) @db.Decimal(14, 4)
   unit                 String
   requiredDate         DateTime?
   purchaseRequisitionLineId String?              @unique @db.Uuid

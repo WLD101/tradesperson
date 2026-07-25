@@ -42,6 +42,14 @@ export type MaterialRequirement = {
     id: string;
     purchaseRequisition: { id: string; requisitionNumber: string; status: string };
   } | null;
+  stockReservations?: Array<{
+    id: string;
+    status: "RESERVED" | "PARTIALLY_ISSUED" | "ISSUED" | "CANCELLED";
+    reservedQuantity: string;
+    issuedQuantity: string;
+    unit: string;
+    warehouse: { id: string; name: string; code: string };
+  }>;
 };
 
 export async function getJobs(params?: Record<string, string | number | undefined>) {
@@ -66,6 +74,13 @@ export async function generateJobMaterialRequirements(id: string) {
 
 export async function createJobMaterialRequisition(id: string) {
   return apiFetch<Job>(`/api/v1/jobs/${id}/material-requirements/create-requisition`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function reserveJobStock(id: string) {
+  return apiFetch<Job>(`/api/v1/jobs/${id}/material-requirements/reserve-stock`, {
     method: "POST",
     body: JSON.stringify({}),
   });

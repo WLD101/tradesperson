@@ -5,6 +5,7 @@ import {
   MaterialRequirementStatus,
   Prisma,
   QuoteStatus,
+  StockReservationStatus,
 } from "@prisma/client/index";
 import { AuditService } from "./audit.service";
 import { BranchAccessService } from "./branch-access.service";
@@ -30,6 +31,12 @@ const JOB_INCLUDE: any = {
         select: {
           id: true,
           purchaseRequisition: { select: { id: true, requisitionNumber: true, status: true } },
+        },
+      },
+      stockReservations: {
+        orderBy: [{ reservedAt: "desc" }],
+        include: {
+          warehouse: { select: { id: true, name: true, code: true } },
         },
       },
     },
@@ -276,6 +283,106 @@ export class JobsService {
     return created.job;
   }
 
+  async reserveStockForJob(session: TenantSession, jobId: string) {
+    const job = await this.ensureJob(session, jobId, {
+      include: {
+        materialRequirements: {
+          include: { stockReservations: true },
+          orderBy: [{ createdAt: "asc" }],
+        },
+      },
+    });
+
+    const reservable = job.materialRequirements.filter((requirement: any) => {
+      if (!requirement.productId) return false;
+      return this.remainingToAllocate(requirement).greaterThan(0);
+    });
+    if (!reservable.length) {
+      throw new BadRequestException("There are no product material requirements remaining to reserve.");
+    }
+
+    const reserved = await this.prisma.client.$transaction(async (tx) => {
+      let reservationCount = 0;
+      for (const requirement of reservable) {
+        const remaining = this.remainingToAllocate(requirement);
+        const balances = await tx.stockBalance.findMany({
+          where: {
+            tenantId: job.tenantId,
+            productId: requirement.productId,
+            productVariantId: requirement.productVariantId,
+            supplierProductId: requirement.supplierProductId,
+          },
+          orderBy: [{ updatedAt: "asc" }],
+        });
+
+        let stillNeeded = remaining;
+        for (const balance of balances) {
+          if (stillNeeded.lessThanOrEqualTo(0)) break;
+          const available = this.money(balance.onHandQuantity).minus(this.money(balance.reservedQuantity));
+          if (available.lessThanOrEqualTo(0)) continue;
+
+          const reserveQuantity = Prisma.Decimal.min(available, stillNeeded);
+          await tx.stockBalance.update({
+            where: { id: balance.id },
+            data: { reservedQuantity: { increment: reserveQuantity } },
+          });
+          await tx.stockReservation.create({
+            data: {
+              tenantId: job.tenantId,
+              branchId: job.branchId,
+              warehouseId: balance.warehouseId,
+              stockBalanceId: balance.id,
+              jobId: job.id,
+              materialRequirementId: requirement.id,
+              productId: requirement.productId,
+              productVariantId: requirement.productVariantId,
+              supplierProductId: requirement.supplierProductId,
+              status: StockReservationStatus.RESERVED,
+              reservedQuantity: reserveQuantity,
+              unit: requirement.unit,
+              reservedById: session.user.id,
+              notes: `Reserved for ${job.jobNumber}.`,
+            },
+          });
+
+          stillNeeded = stillNeeded.minus(reserveQuantity);
+          reservationCount += 1;
+        }
+
+        const allocatedQuantity = this.money(requirement.allocatedQuantity).plus(remaining.minus(stillNeeded));
+        if (allocatedQuantity.greaterThan(this.money(requirement.allocatedQuantity))) {
+          await tx.materialRequirement.update({
+            where: { id: requirement.id },
+            data: {
+              allocatedQuantity,
+              status: allocatedQuantity.greaterThanOrEqualTo(this.money(requirement.requiredQuantity))
+                ? MaterialRequirementStatus.ALLOCATED
+                : MaterialRequirementStatus.PARTIALLY_ALLOCATED,
+              updatedById: session.user.id,
+            },
+          });
+        }
+      }
+
+      if (reservationCount === 0) {
+        throw new BadRequestException("No available stock could be reserved for this job.");
+      }
+
+      return tx.job.findFirstOrThrow({ where: { id: job.id, tenantId: job.tenantId }, include: JOB_INCLUDE });
+    });
+
+    await this.audit.record({
+      tenantId: job.tenantId,
+      actorUserId: session.user.id,
+      action: "job:stock:reserve",
+      entityType: "job",
+      entityId: job.id,
+      newValues: { jobNumber: job.jobNumber },
+    });
+
+    return reserved;
+  }
+
   private async ensureJob(session: TenantSession, jobId: string, args?: Omit<Prisma.JobFindFirstArgs, "where">): Promise<any> {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const job = await this.prisma.client.job.findFirst({
@@ -370,6 +477,10 @@ export class JobsService {
 
   private remainingRequirementQuantity(requirement: { requiredQuantity: Prisma.Decimal; requisitionedQuantity?: Prisma.Decimal | null }) {
     return this.money(requirement.requiredQuantity).minus(this.money(requirement.requisitionedQuantity ?? 0));
+  }
+
+  private remainingToAllocate(requirement: { requiredQuantity: Prisma.Decimal; allocatedQuantity?: Prisma.Decimal | null }) {
+    return this.money(requirement.requiredQuantity).minus(this.money(requirement.allocatedQuantity ?? 0));
   }
 
   private money(value: number | string | Prisma.Decimal | null | undefined) {

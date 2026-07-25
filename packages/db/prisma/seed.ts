@@ -2010,6 +2010,9 @@ async function main() {
     },
   });
 
+  await prisma.stockReservation.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.stockBalance.deleteMany({ where: { tenantId: tenant.id } });
+  await prisma.inventoryWarehouse.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.job.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.quoteVersion.deleteMany({ where: { tenantId: tenant.id } });
   await prisma.quoteLine.deleteMany({ where: { tenantId: tenant.id } });
@@ -2419,6 +2422,44 @@ async function main() {
           updatedById: owner.id,
         };
       }),
+  });
+
+  const defaultWarehouse = await prisma.inventoryWarehouse.create({
+    data: {
+      tenantId: tenant.id,
+      branchId: headOffice.id,
+      code: "MAIN",
+      name: "Main stockroom",
+      isDefault: true,
+      addressLine1: headOffice.addressLine1,
+      city: headOffice.city,
+      postcode: headOffice.postcode,
+    },
+  });
+
+  await prisma.stockBalance.createMany({
+    data: [
+      {
+        tenantId: tenant.id,
+        branchId: headOffice.id,
+        warehouseId: defaultWarehouse.id,
+        productId: carpetProduct.id,
+        productVariantId: carpetVariant?.id ?? null,
+        supplierProductId: carpetSupplierProduct.id,
+        unit: "SQM",
+        onHandQuantity: "45.0000",
+      },
+      {
+        tenantId: tenant.id,
+        branchId: headOffice.id,
+        warehouseId: defaultWarehouse.id,
+        productId: edgeProduct.id,
+        productVariantId: edgeVariant?.id ?? null,
+        supplierProductId: edgeSupplierProduct.id,
+        unit: "EACH",
+        onHandQuantity: "20.0000",
+      },
+    ],
   });
 
   await prisma.numberSequence.update({

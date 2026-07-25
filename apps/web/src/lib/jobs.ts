@@ -23,11 +23,24 @@ export type Job = {
   branch?: { id: string; name: string };
   quote?: { id: string; quoteNumber: string; status: string; grandTotal: string } | null;
   materialRequirements?: MaterialRequirement[];
+  invoices?: Invoice[];
 };
 
 export type MaterialRequirement = {
   id: string;
-  status: "PLANNED" | "PARTIALLY_ORDERED" | "ORDERED" | "PARTIALLY_RECEIVED" | "RECEIVED" | "ALLOCATED" | "CANCELLED";
+  status:
+    | "PLANNED"
+    | "PARTIALLY_REQUISITIONED"
+    | "REQUISITIONED"
+    | "PARTIALLY_ORDERED"
+    | "ORDERED"
+    | "PARTIALLY_RECEIVED"
+    | "RECEIVED"
+    | "PARTIALLY_ALLOCATED"
+    | "ALLOCATED"
+    | "PARTIALLY_ISSUED"
+    | "ISSUED"
+    | "CANCELLED";
   description: string;
   requiredQuantity: string;
   requisitionedQuantity: string;
@@ -54,6 +67,34 @@ export type MaterialRequirement = {
     unit: string;
     warehouse: { id: string; name: string; code: string };
   }>;
+};
+
+export type Invoice = {
+  id: string;
+  invoiceNumber: string;
+  status: "DRAFT" | "ISSUED" | "PAID" | "CANCELLED";
+  currency: string;
+  subtotal: string;
+  vatAmount: string;
+  total: string;
+  paidAmount: string;
+  balanceDue: string;
+  issuedAt: string | null;
+  dueDate: string | null;
+  notes: string | null;
+  payments?: Payment[];
+};
+
+export type Payment = {
+  id: string;
+  paymentNumber: string;
+  status: "RECORDED" | "VOIDED";
+  amount: string;
+  currency: string;
+  method: string | null;
+  reference: string | null;
+  paidAt: string;
+  notes: string | null;
 };
 
 export async function getJobs(params?: Record<string, string | number | undefined>) {
@@ -106,6 +147,23 @@ export async function scheduleJob(id: string, payload: { scheduledStart: string;
 
 export async function completeJob(id: string, payload: { completionNotes?: string; customerSignoffName?: string }) {
   return apiFetch<Job>(`/api/v1/jobs/${id}/complete`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createJobInvoice(id: string, payload: { dueDate?: string; notes?: string } = {}) {
+  return apiFetch<Job>(`/api/v1/jobs/${id}/create-invoice`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function recordInvoicePayment(
+  invoiceId: string,
+  payload: { amount: number; method?: string; reference?: string; paidAt?: string; notes?: string },
+) {
+  return apiFetch<Job>(`/api/v1/invoices/${invoiceId}/payments`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -46,6 +46,19 @@ const completeJobSchema = z.object({
   customerSignoffName: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
 });
 
+const createInvoiceSchema = z.object({
+  dueDate: z.preprocess(emptyStringToNull, z.coerce.date().nullable()).optional(),
+  notes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
+});
+
+const recordPaymentSchema = z.object({
+  amount: z.coerce.number().positive(),
+  method: z.preprocess(emptyStringToNull, z.string().max(80).nullable()).optional(),
+  reference: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
+  paidAt: z.preprocess(emptyStringToNull, z.coerce.date().nullable()).optional(),
+  notes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
+});
+
 type TenantSession = Parameters<JobsService["listJobs"]>[0];
 
 @Controller({ version: "1" })
@@ -125,6 +138,28 @@ class JobsController {
   @RequirePermissions("job:write")
   completeJob(@Param("id") id: string, @Body() body: unknown, @CurrentSession() session: TenantSession) {
     return this.jobs.completeJob(session, id, completeJobSchema.parse(body));
+  }
+
+  @Post("jobs/:id/create-invoice")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:write")
+  createInvoiceFromJob(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentSession() session: TenantSession,
+  ) {
+    return this.jobs.createInvoiceFromJob(session, id, createInvoiceSchema.parse(body));
+  }
+
+  @Post("invoices/:invoiceId/payments")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:write")
+  recordInvoicePayment(
+    @Param("invoiceId") invoiceId: string,
+    @Body() body: unknown,
+    @CurrentSession() session: TenantSession,
+  ) {
+    return this.jobs.recordInvoicePayment(session, invoiceId, recordPaymentSchema.parse(body));
   }
 }
 

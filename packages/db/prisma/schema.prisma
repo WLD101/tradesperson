@@ -358,6 +358,18 @@ enum StockReservationStatus {
   CANCELLED
 }
 
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  CANCELLED
+}
+
+enum PaymentStatus {
+  RECORDED
+  VOIDED
+}
+
 model User {
   id                String                 @id @default(uuid()) @db.Uuid
   email             String                 @unique
@@ -480,6 +492,8 @@ model Tenant {
   inventoryWarehouses        InventoryWarehouse[]
   stockBalances              StockBalance[]
   stockReservations          StockReservation[]
+  invoices                   Invoice[]
+  payments                   Payment[]
 }
 
 model TenantMembership {
@@ -580,6 +594,8 @@ model Branch {
   inventoryWarehouses  InventoryWarehouse[]
   stockBalances        StockBalance[]
   stockReservations    StockReservation[]
+  invoices             Invoice[]
+  payments             Payment[]
 
   @@unique([tenantId, branchCode])
   @@index([tenantId, status])
@@ -639,6 +655,7 @@ model Customer {
   estimates      Estimate[]
   quotes         Quote[]
   jobs           Job[]
+  invoices       Invoice[]
 
   @@index([tenantId, displayName])
   @@index([branchId])
@@ -687,6 +704,7 @@ model Site {
   estimates      Estimate[]
   quotes         Quote[]
   jobs           Job[]
+  invoices       Invoice[]
 
   @@index([tenantId, customerId, createdAt])
   @@index([branchId])
@@ -1714,6 +1732,7 @@ model Job {
   quote                Quote?                @relation(fields: [quoteId], references: [id], onDelete: SetNull)
   materialRequirements MaterialRequirement[]
   stockReservations    StockReservation[]
+  invoices             Invoice[]
 
   @@unique([tenantId, jobNumber])
   @@index([tenantId, branchId, status, createdAt])
@@ -1788,6 +1807,64 @@ model InventoryWarehouse {
 
   @@unique([tenantId, code])
   @@index([tenantId, branchId])
+}
+
+model Invoice {
+  id            String        @id @default(uuid()) @db.Uuid
+  tenantId      String        @db.Uuid
+  branchId      String?       @db.Uuid
+  jobId         String        @db.Uuid
+  customerId    String        @db.Uuid
+  siteId        String        @db.Uuid
+  invoiceNumber String
+  status        InvoiceStatus @default(DRAFT)
+  currency      String        @default("GBP")
+  subtotal      Decimal       @default(0) @db.Decimal(14, 4)
+  vatAmount     Decimal       @default(0) @db.Decimal(14, 4)
+  total         Decimal       @default(0) @db.Decimal(14, 4)
+  paidAmount    Decimal       @default(0) @db.Decimal(14, 4)
+  balanceDue    Decimal       @default(0) @db.Decimal(14, 4)
+  issuedAt      DateTime?
+  dueDate       DateTime?
+  notes         String?
+  createdById   String?       @db.Uuid
+  updatedById   String?       @db.Uuid
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch        Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  job           Job           @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  site          Site          @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  payments      Payment[]
+
+  @@unique([tenantId, invoiceNumber])
+  @@index([tenantId, jobId])
+  @@index([tenantId, branchId, status, createdAt])
+}
+
+model Payment {
+  id            String        @id @default(uuid()) @db.Uuid
+  tenantId      String        @db.Uuid
+  branchId      String?       @db.Uuid
+  invoiceId     String        @db.Uuid
+  paymentNumber String
+  status        PaymentStatus @default(RECORDED)
+  amount        Decimal       @db.Decimal(14, 4)
+  currency      String        @default("GBP")
+  method        String?
+  reference     String?
+  paidAt        DateTime      @default(now())
+  notes         String?
+  createdById   String?       @db.Uuid
+  createdAt     DateTime      @default(now())
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch        Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  invoice       Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, paymentNumber])
+  @@index([tenantId, invoiceId])
+  @@index([tenantId, branchId, paidAt])
 }
 
 model StockBalance {

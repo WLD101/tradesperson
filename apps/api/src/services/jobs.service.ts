@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import {
   EstimateLineType,
+  InvoiceStatus,
   JobStatus,
   MaterialRequirementStatus,
   Prisma,
@@ -20,6 +21,12 @@ const JOB_INCLUDE: any = {
   customer: { select: { id: true, displayName: true, primaryEmail: true, primaryPhone: true } },
   site: { select: { id: true, label: true, addressLine1: true, city: true, postcode: true } },
   quote: { select: { id: true, quoteNumber: true, status: true, grandTotal: true } },
+  invoices: {
+    orderBy: [{ createdAt: "desc" }],
+    include: {
+      payments: { orderBy: [{ paidAt: "desc" }] },
+    },
+  },
   materialRequirements: {
     orderBy: [{ createdAt: "asc" }],
     include: {
@@ -519,6 +526,133 @@ export class JobsService {
     return updated;
   }
 
+  async createInvoiceFromJob(session: TenantSession, jobId: string, input: any) {
+    const job = await this.ensureJob(session, jobId, { include: { invoices: true } });
+    if (job.status !== JobStatus.COMPLETED) {
+      throw new BadRequestException("Only completed jobs can be invoiced.");
+    }
+
+    const existingInvoice = job.invoices.find((invoice: any) => invoice.status !== InvoiceStatus.CANCELLED);
+    if (existingInvoice) {
+      return this.ensureJob(session, job.id, { include: JOB_INCLUDE });
+    }
+
+    const updated = await this.prisma.client.$transaction(async (tx) => {
+      const invoiceNumber = await this.allocateNumber(tx, job.tenantId, "invoice", "INV");
+      const total = this.money(job.totalValue);
+      const paidAmount = Prisma.Decimal.min(this.money(job.depositPaid), total);
+      const balanceDue = total.minus(paidAmount);
+      const dueDate = input.dueDate ?? this.defaultDueDate();
+
+      await tx.invoice.create({
+        data: {
+          tenantId: job.tenantId,
+          branchId: job.branchId,
+          jobId: job.id,
+          customerId: job.customerId,
+          siteId: job.siteId,
+          invoiceNumber,
+          status: balanceDue.lessThanOrEqualTo(0) ? InvoiceStatus.PAID : InvoiceStatus.ISSUED,
+          currency: job.currency,
+          subtotal: total,
+          vatAmount: 0,
+          total,
+          paidAmount,
+          balanceDue,
+          issuedAt: new Date(),
+          dueDate,
+          notes: this.trimOrNull(input.notes),
+          createdById: session.user.id,
+          updatedById: session.user.id,
+        },
+      });
+
+      return tx.job.findFirstOrThrow({ where: { id: job.id, tenantId: job.tenantId }, include: JOB_INCLUDE });
+    });
+
+    await this.audit.record({
+      tenantId: job.tenantId,
+      actorUserId: session.user.id,
+      action: "job:invoice:create",
+      entityType: "job",
+      entityId: job.id,
+      newValues: { jobNumber: job.jobNumber, invoiceCount: (updated.invoices ?? []).length },
+    });
+
+    return updated;
+  }
+
+  async recordInvoicePayment(session: TenantSession, invoiceId: string, input: any) {
+    const { tenantId } = this.tenantAccess.ensureTenant(session);
+    const invoice = await this.prisma.client.invoice.findFirst({
+      where: {
+        id: invoiceId,
+        tenantId,
+        job: this.branchAccess.branchWhere(session, tenantId),
+      },
+      include: { job: true },
+    });
+    if (!invoice) throw new NotFoundException("Resource not found.");
+    if (invoice.status === InvoiceStatus.CANCELLED) {
+      throw new BadRequestException("Cancelled invoices cannot receive payments.");
+    }
+    if (invoice.status === InvoiceStatus.PAID || this.money(invoice.balanceDue).lessThanOrEqualTo(0)) {
+      throw new BadRequestException("This invoice is already paid.");
+    }
+
+    const amount = this.money(input.amount);
+    if (amount.lessThanOrEqualTo(0)) {
+      throw new BadRequestException("Payment amount must be greater than zero.");
+    }
+    if (amount.greaterThan(this.money(invoice.balanceDue))) {
+      throw new BadRequestException("Payment amount cannot exceed the invoice balance.");
+    }
+
+    const updated = await this.prisma.client.$transaction(async (tx) => {
+      const paymentNumber = await this.allocateNumber(tx, invoice.tenantId, "payment", "PAY");
+      const paidAmount = this.money(invoice.paidAmount).plus(amount);
+      const balanceDue = this.money(invoice.total).minus(paidAmount);
+
+      await tx.payment.create({
+        data: {
+          tenantId: invoice.tenantId,
+          branchId: invoice.branchId,
+          invoiceId: invoice.id,
+          paymentNumber,
+          amount,
+          currency: invoice.currency,
+          method: this.trimOrNull(input.method),
+          reference: this.trimOrNull(input.reference),
+          paidAt: input.paidAt ?? new Date(),
+          notes: this.trimOrNull(input.notes),
+          createdById: session.user.id,
+        },
+      });
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          paidAmount,
+          balanceDue,
+          status: balanceDue.lessThanOrEqualTo(0) ? InvoiceStatus.PAID : InvoiceStatus.ISSUED,
+          updatedById: session.user.id,
+        },
+      });
+
+      return tx.job.findFirstOrThrow({ where: { id: invoice.jobId, tenantId: invoice.tenantId }, include: JOB_INCLUDE });
+    });
+
+    await this.audit.record({
+      tenantId: invoice.tenantId,
+      actorUserId: session.user.id,
+      action: "invoice:payment:record",
+      entityType: "invoice",
+      entityId: invoice.id,
+      newValues: { amount: amount.toString(), invoiceNumber: invoice.invoiceNumber },
+    });
+
+    return updated;
+  }
+
   private async ensureJob(session: TenantSession, jobId: string, args?: Omit<Prisma.JobFindFirstArgs, "where">): Promise<any> {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const job = await this.prisma.client.job.findFirst({
@@ -621,6 +755,12 @@ export class JobsService {
 
   private money(value: number | string | Prisma.Decimal | null | undefined) {
     return new Prisma.Decimal(value ?? 0);
+  }
+
+  private defaultDueDate() {
+    const dueDate = new Date();
+    dueDate.setUTCDate(dueDate.getUTCDate() + 14);
+    return dueDate;
   }
 
   private trimOrNull(value: string | null | undefined) {

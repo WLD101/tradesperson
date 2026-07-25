@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Breadcrumbs, DateDisplay, Money, PageHeader, StatusBadge, SummaryStrip } from "@/components/shared";
 import { getSession } from "@/lib/api";
-import { completeJob, createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, issueJobStock, reserveJobStock, scheduleJob } from "@/lib/jobs";
+import { completeJob, createJobInvoice, createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, issueJobStock, recordInvoicePayment, reserveJobStock, scheduleJob } from "@/lib/jobs";
 
 function statusColor(status: string) {
   if (status === "SCHEDULED") return "blue" as const;
@@ -63,6 +63,30 @@ async function completeJobAction(formData: FormData) {
   });
 }
 
+async function createInvoiceAction(formData: FormData) {
+  "use server";
+  const jobId = String(formData.get("jobId") ?? "");
+  if (!jobId) return;
+  await createJobInvoice(jobId, {
+    dueDate: String(formData.get("dueDate") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+  });
+}
+
+async function recordPaymentAction(formData: FormData) {
+  "use server";
+  const invoiceId = String(formData.get("invoiceId") ?? "");
+  const amount = Number(formData.get("amount") ?? 0);
+  if (!invoiceId || amount <= 0) return;
+  await recordInvoicePayment(invoiceId, {
+    amount,
+    method: String(formData.get("method") ?? ""),
+    reference: String(formData.get("reference") ?? ""),
+    paidAt: String(formData.get("paidAt") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+  });
+}
+
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) redirect("/sign-in");
@@ -78,6 +102,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   }
   const depositComplete = Number(job.depositRequired) <= Number(job.depositPaid);
   const materialRequirements = job.materialRequirements ?? [];
+  const invoices = job.invoices ?? [];
+  const activeInvoice = invoices.find((invoice) => invoice.status !== "CANCELLED");
   const hasOutstandingRequirements = materialRequirements.some((requirement) => {
     const required = Number(requirement.requiredQuantity);
     const requisitioned = Number(requirement.requisitionedQuantity);
@@ -181,6 +207,109 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               </div>
             ) : null}
           </form>
+        )}
+      </section>
+      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 border-b border-slate-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-semibold text-slate-950">Invoice & Payments</h2>
+            <p className="text-sm text-slate-500">Final billing for this flooring job, including deposit credit and recorded customer payments.</p>
+          </div>
+          {!activeInvoice && job.status === "COMPLETED" && perms.canWrite ? (
+            <form action={createInvoiceAction} className="flex flex-col gap-2 sm:w-80">
+              <input name="jobId" type="hidden" value={job.id} />
+              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" name="dueDate" type="date" aria-label="Invoice due date" />
+              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" name="notes" placeholder="Optional invoice note" />
+              <button className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700" type="submit">
+                Create invoice
+              </button>
+            </form>
+          ) : null}
+        </div>
+        {activeInvoice ? (
+          <div className="mt-4 grid gap-5 lg:grid-cols-[1fr_360px]">
+            <div>
+              <div className="rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm text-slate-500">Invoice</div>
+                    <div className="text-lg font-semibold text-slate-950">{activeInvoice.invoiceNumber}</div>
+                  </div>
+                  <StatusBadge status={activeInvoice.status} color={activeInvoice.status === "PAID" ? "green" : "blue"} />
+                </div>
+                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                  <div className="flex justify-between gap-3"><dt>Total</dt><dd><Money amount={Number(activeInvoice.total)} currency={activeInvoice.currency} /></dd></div>
+                  <div className="flex justify-between gap-3"><dt>Deposit / paid</dt><dd><Money amount={Number(activeInvoice.paidAmount)} currency={activeInvoice.currency} /></dd></div>
+                  <div className="flex justify-between gap-3"><dt>Balance due</dt><dd className={Number(activeInvoice.balanceDue) > 0 ? "font-semibold text-amber-700" : "font-semibold text-green-700"}><Money amount={Number(activeInvoice.balanceDue)} currency={activeInvoice.currency} /></dd></div>
+                  <div className="flex justify-between gap-3"><dt>Due</dt><dd><DateDisplay date={activeInvoice.dueDate} /></dd></div>
+                </dl>
+                {activeInvoice.notes ? <p className="mt-4 rounded-md bg-slate-50 p-3 text-sm text-slate-600">{activeInvoice.notes}</p> : null}
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">Payment</th>
+                      <th className="px-4 py-3">Date</th>
+                      <th className="px-4 py-3">Method</th>
+                      <th className="px-4 py-3">Reference</th>
+                      <th className="px-4 py-3 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {activeInvoice.payments?.length ? activeInvoice.payments.map((payment) => (
+                      <tr key={payment.id}>
+                        <td className="px-4 py-3 font-medium text-slate-900">{payment.paymentNumber}</td>
+                        <td className="px-4 py-3"><DateDisplay date={payment.paidAt} /></td>
+                        <td className="px-4 py-3">{payment.method ?? "-"}</td>
+                        <td className="px-4 py-3">{payment.reference ?? "-"}</td>
+                        <td className="px-4 py-3 text-right"><Money amount={Number(payment.amount)} currency={payment.currency} /></td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>No additional payments have been recorded yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {Number(activeInvoice.balanceDue) > 0 && perms.canWrite ? (
+              <form action={recordPaymentAction} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <input name="invoiceId" type="hidden" value={activeInvoice.id} />
+                <h3 className="font-semibold text-slate-950">Record payment</h3>
+                <div className="mt-4 space-y-3">
+                  <label className="block space-y-1 text-sm">
+                    <span className="font-medium text-slate-700">Amount</span>
+                    <input className="w-full rounded-md border border-slate-300 px-3 py-2" name="amount" type="number" min="0.01" max={Number(activeInvoice.balanceDue)} step="0.01" defaultValue={Number(activeInvoice.balanceDue).toFixed(2)} required />
+                  </label>
+                  <label className="block space-y-1 text-sm">
+                    <span className="font-medium text-slate-700">Paid at</span>
+                    <input className="w-full rounded-md border border-slate-300 px-3 py-2" name="paidAt" type="date" />
+                  </label>
+                  <label className="block space-y-1 text-sm">
+                    <span className="font-medium text-slate-700">Method</span>
+                    <input className="w-full rounded-md border border-slate-300 px-3 py-2" name="method" placeholder="Card, bank transfer, cash" />
+                  </label>
+                  <label className="block space-y-1 text-sm">
+                    <span className="font-medium text-slate-700">Reference</span>
+                    <input className="w-full rounded-md border border-slate-300 px-3 py-2" name="reference" placeholder="Receipt or bank reference" />
+                  </label>
+                  <label className="block space-y-1 text-sm">
+                    <span className="font-medium text-slate-700">Notes</span>
+                    <textarea className="min-h-20 w-full rounded-md border border-slate-300 px-3 py-2" name="notes" />
+                  </label>
+                </div>
+                <button className="mt-4 w-full rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-600" type="submit">
+                  Record payment
+                </button>
+              </form>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-lg border border-dashed border-slate-300 p-6 text-sm text-slate-500">
+            {job.status === "COMPLETED" ? "No invoice has been created yet." : "Complete the installation before creating the final invoice."}
+          </div>
         )}
       </section>
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

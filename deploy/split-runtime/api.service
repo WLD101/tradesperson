@@ -1,0 +1,18 @@
+[Unit]
+Description=Tradesperson ERP API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tradesperson
+EnvironmentFile=/etc/tradesperson/api.env
+ExecStart=/usr/bin/pnpm --filter @tradesperson/api start
+Restart=always
+RestartSec=5
+User=tradesperson
+Group=tradesperson
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

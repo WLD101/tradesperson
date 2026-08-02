@@ -1,0 +1,18 @@
+[Unit]
+Description=Tradesperson ERP Worker
+After=network.target redis.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/tradesperson
+EnvironmentFile=/etc/tradesperson/worker.env
+ExecStart=/usr/bin/node apps/worker/dist/index.js
+Restart=always
+RestartSec=5
+User=tradesperson
+Group=tradesperson
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

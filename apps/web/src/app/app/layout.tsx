@@ -1,34 +1,15 @@
-import Link from "next/link";
+import { Bell, UserCircle } from "lucide-react";
 import { redirect } from "next/navigation";
 import { apiFetch, getSession } from "@/lib/api";
 import { getEstimatePermissions } from "@/lib/estimates";
 import { getJobPermissions } from "@/lib/jobs";
 import { getProcurementPermissions } from "@/lib/procurement";
 import { getQuotePermissions } from "@/lib/quotes";
+import { AppShellNav, BrandLockup, type ShellNavGroup } from "./app-shell-nav";
+import { GlobalCommandPalette } from "./global-command-palette";
 
-// Reusable components
-function NavGroup({ title, children }: { title: string, children: React.ReactNode }) {
-  return (
-    <div className="pt-4 pb-1">
-      <p className="px-3 text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1">
-        {title}
-      </p>
-      <div className="space-y-1">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function NavItem({ href, label }: { href: string, label: string }) {
-  return (
-    <Link
-      href={href}
-      className="block rounded-md px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors"
-    >
-      {label}
-    </Link>
-  );
+function navItem(item: ShellNavGroup["items"][number]) {
+  return item;
 }
 
 export default async function AppLayout({
@@ -46,92 +27,125 @@ export default async function AppLayout({
     branches: Array<{ id: string; name: string }>;
   }>("/api/v1/tenants/current");
 
+  const activeBranch = tenant.branches.find((branch) => branch.id === session.activeBranchId);
   const procurementPerms = getProcurementPermissions(session);
   const estimatePerms = getEstimatePermissions(session);
   const quotePerms = getQuotePermissions(session);
   const jobPerms = getJobPermissions(session);
 
+  const navGroups: ShellNavGroup[] = [
+    {
+      title: "Operations",
+      items: [
+        navItem({ href: "/app/dashboard", label: "Dashboard", icon: "dashboard" }),
+        ...(jobPerms.canRead ? [navItem({ href: "/app/schedule", label: "Scheduler", icon: "scheduler" })] : []),
+        ...(jobPerms.canRead ? [navItem({ href: "/app/field/today", label: "Field App", icon: "jobs" })] : []),
+      ],
+    },
+    {
+      title: "CRM",
+      items: [
+        navItem({ href: "/app/crm/leads", label: "Leads", icon: "crm" }),
+        navItem({ href: "/app/crm/customers", label: "Customers", icon: "business" }),
+        navItem({ href: "/app/crm/sites", label: "Sites", icon: "business" }),
+        navItem({ href: "/app/crm/surveys", label: "Surveys", icon: "reports" }),
+      ],
+    },
+    {
+      title: "Sales",
+      items: [
+        ...(estimatePerms.canRead ? [navItem({ href: "/app/estimates", label: "Estimates", icon: "estimates" })] : []),
+        ...(quotePerms.canRead ? [navItem({ href: "/app/quotes", label: "Quotes", icon: "quotes" })] : []),
+        ...(jobPerms.canRead ? [navItem({ href: "/app/jobs", label: "Jobs", icon: "jobs" })] : []),
+        ...(jobPerms.canRead ? [navItem({ href: "/app/finance", label: "Finance", icon: "finance" })] : []),
+      ],
+    },
+    {
+      title: "Supply",
+      items: [
+        navItem({ href: "/app/catalogue", label: "Catalogue", icon: "catalogue" }),
+        navItem({ href: "/app/suppliers", label: "Suppliers", icon: "procurement" }),
+        navItem({ href: "/app/inventory", label: "Inventory", icon: "inventory" }),
+        navItem({ href: "/app/imports", label: "Imports", icon: "imports" }),
+        ...(procurementPerms.canViewRequisition || procurementPerms.canViewPo
+          ? [navItem({ href: "/app/procurement", label: "Procurement", icon: "inventory" })]
+          : []),
+        ...(procurementPerms.canViewPo
+          ? [navItem({ href: "/app/procurement/purchase-orders", label: "Purchase Orders", icon: "procurement" })]
+          : []),
+      ],
+    },
+    {
+      title: "Administration",
+      items: [
+        navItem({ href: "/app/settings", label: "Admin Centre", icon: "settings" }),
+        navItem({ href: "/app/onboarding", label: "Onboarding", icon: "onboarding" }),
+        navItem({ href: "/app/documents", label: "Documents", icon: "reports" }),
+        navItem({ href: "/app/settings/business", label: "Business", icon: "settings" }),
+        navItem({ href: "/app/settings/branches", label: "Branches", icon: "settings" }),
+        navItem({ href: "/app/settings/users", label: "Users", icon: "settings" }),
+        navItem({ href: "/app/settings/roles", label: "Roles & Permissions", icon: "settings" }),
+      ],
+    },
+  ].filter((group) => group.items.length > 0);
+
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
-      {/* Top Bar */}
-      <header className="bg-slate-950 text-white border-b border-slate-800 sticky top-0 z-40 shadow-sm">
-        <div className="flex h-14 items-center px-4 justify-between">
-          <div className="flex items-center gap-4">
-            <div className="font-bold text-lg tracking-tight">Tradesperson<span className="text-blue-400">.net</span></div>
-            <div className="hidden md:flex ml-4 items-center">
-              <span className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full uppercase tracking-widest">{tenant.name}</span>
+    <div className="min-h-screen bg-stitch-background text-slate-950">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-sidebar-width border-r border-white/10 bg-stitch-nav lg:block">
+        <div className="flex h-16 items-center border-b border-white/10 px-5">
+          <BrandLockup />
+        </div>
+        <AppShellNav groups={navGroups} />
+      </aside>
+
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur-xl lg:fixed lg:left-sidebar-width lg:right-0">
+        <div className="flex h-16 items-center gap-3 px-4 lg:px-6">
+          <AppShellNav groups={navGroups} showDesktop={false} />
+          <div className="lg:hidden">
+            <BrandLockup compact />
+          </div>
+
+          <div className="hidden min-w-0 flex-1 items-center gap-3 md:flex">
+            <GlobalCommandPalette />
+            <div className="hidden items-center gap-2 text-sm text-slate-600 xl:flex">
+              <span className="text-slate-400">/</span>
+              <span className="font-medium text-slate-900">Workspace</span>
             </div>
           </div>
-          <div className="flex items-center gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400 hidden md:inline">Branch:</span>
-              <span className="font-medium text-white bg-slate-800 px-2 py-1 rounded-md text-xs">
-                {tenant.branches.find(b => b.id === session.activeBranchId)?.name ?? "None"}
-              </span>
+
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <div className="hidden rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-[0.08em] text-slate-600 shadow-sm md:block">
+              {tenant.name}
             </div>
-            <div className="h-4 w-px bg-slate-700 hidden md:block"></div>
-            <div className="font-medium text-white hidden md:block">
-              {session.user.firstName} {session.user.lastName}
+            <div className="hidden rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 ring-1 ring-emerald-200 sm:block">
+              {activeBranch?.name ?? "No branch"}
+            </div>
+            <button
+              className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm"
+              type="button"
+              disabled
+              title="Notifications are not wired to a notification centre yet."
+            >
+              <span className="sr-only">Notifications unavailable</span>
+              <Bell className="h-5 w-5" />
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-red-600" aria-hidden="true" />
+            </button>
+            <div className="flex items-center gap-2 border-l border-slate-200 pl-3">
+              <div className="hidden text-right leading-tight md:block">
+                <p className="text-sm font-bold text-slate-950">{session.user.firstName} {session.user.lastName}</p>
+                <p className="text-xs text-slate-500">ERP user</p>
+              </div>
+              <UserCircle className="h-9 w-9 text-slate-950" aria-hidden="true" />
             </div>
           </div>
         </div>
       </header>
-      
-      <div className="flex min-h-[calc(100vh-3.5rem)]">
-        {/* Sidebar */}
-        <aside className="w-[240px] shrink-0 border-r border-slate-200 bg-white hidden md:block">
-          <div className="flex flex-col h-full overflow-y-auto px-3 py-2">
-            <nav className="flex-1 space-y-1">
-              <NavGroup title="Workspace">
-                <NavItem href="/app/dashboard" label="Dashboard" />
-                <NavItem href="/app/design-system" label="Design System" />
-              </NavGroup>
-              
-              <NavGroup title="CRM">
-                <NavItem href="/app/crm/leads" label="Leads" />
-                <NavItem href="/app/crm/customers" label="Customers" />
-                <NavItem href="/app/crm/sites" label="Sites" />
-                <NavItem href="/app/crm/surveys" label="Surveys" />
-              </NavGroup>
-              
-              <NavGroup title="Catalogue">
-                <NavItem href="/app/catalogue" label="Products" />
-                <NavItem href="/app/suppliers" label="Suppliers" />
-              </NavGroup>
 
-              {(estimatePerms.canRead || quotePerms.canRead || jobPerms.canRead) && (
-                <NavGroup title="Sales">
-                  {estimatePerms.canRead && <NavItem href="/app/estimates" label="Estimates" />}
-                  {quotePerms.canRead && <NavItem href="/app/quotes" label="Quotes" />}
-                  {jobPerms.canRead && <NavItem href="/app/jobs" label="Jobs" />}
-                </NavGroup>
-              )}
-
-              {(procurementPerms.canViewRequisition || procurementPerms.canViewPo) && (
-                <NavGroup title="Procurement">
-                  <NavItem href="/app/procurement" label="Overview" />
-                  {procurementPerms.canViewRequisition && <NavItem href="/app/procurement/requisitions" label="Requisitions" />}
-                  {procurementPerms.canViewPo && <NavItem href="/app/procurement/purchase-orders" label="Purchase Orders" />}
-                </NavGroup>
-              )}
-
-              <NavGroup title="Administration">
-                <NavItem href="/app/settings/business" label="Business" />
-                <NavItem href="/app/settings/branches" label="Branches" />
-                <NavItem href="/app/settings/users" label="Users" />
-                <NavItem href="/app/settings/roles" label="Roles & Permissions" />
-              </NavGroup>
-            </nav>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 min-w-0 bg-slate-50/50">
-          <div className="p-6 md:p-8 max-w-7xl mx-auto">
-            {children}
-          </div>
-        </main>
-      </div>
+      <main className="min-h-screen min-w-0 overflow-x-hidden bg-stitch-background pt-4 lg:pl-sidebar-width lg:pt-16">
+        <div className="mx-auto w-full max-w-content-max min-w-0 px-4 py-5 sm:px-6 lg:px-8">
+          {children}
+        </div>
+      </main>
     </div>
   );
 }

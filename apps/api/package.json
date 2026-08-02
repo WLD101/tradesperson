@@ -5,6 +5,7 @@
   "scripts": {
     "build": "nest build",
     "dev": "nest start --watch --entryFile apps/api/src/main --sourceRoot . --env-file ../../.env",
+    "start": "node dist/apps/api/src/main.js",
     "lint": "eslint src --max-warnings=0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run test:unit && pnpm run test:db",
@@ -17,13 +18,18 @@
     "test:migration:seed": "tsx test/scripts/verify-seed-repeatability.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1096.0",
+    "@aws-sdk/s3-request-presigner": "^3.1096.0",
     "@nestjs/common": "^11.1.3",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.3",
     "@nestjs/platform-express": "^11.1.3",
+    "@nestjs/platform-socket.io": "^11.1.28",
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/throttler": "^6.4.0",
+    "@nestjs/websockets": "^11.1.28",
     "@prisma/client": "^6.11.1",
+    "@sendgrid/mail": "^8.1.6",
     "@tradesperson/auth": "workspace:*",
     "@tradesperson/config": "workspace:*",
     "@tradesperson/db": "workspace:*",
@@ -40,8 +46,11 @@
     "papaparse": "5.5.4",
     "read-excel-file": "9.3.2",
     "rxjs": "^7.8.2",
+    "socket.io": "^4.8.3",
+    "stripe": "^22.3.2",
+    "twilio": "^6.0.2",
     "uuid": "^11.1.0",
-    "zod": "^4.0.5"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.10",

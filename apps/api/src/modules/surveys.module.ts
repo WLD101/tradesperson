@@ -48,7 +48,7 @@ class SurveysController {
 
   @Get()
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.view")
+  @RequirePermissions("sites:view")
   async list(@CurrentSession() session: TenantSession) {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     return this.prisma.client.survey.findMany({
@@ -66,7 +66,7 @@ class SurveysController {
 
   @Post()
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.manage")
+  @RequirePermissions("sites:manage")
   async create(@Body() body: unknown, @CurrentSession() session: TenantSession) {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const input = surveySchema.parse(body);
@@ -81,7 +81,7 @@ class SurveysController {
 
   @Patch(":id/status")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.manage")
+  @RequirePermissions("sites:manage")
   async updateStatus(
     @Param("id") id: string,
     @Body() body: unknown,
@@ -94,7 +94,7 @@ class SurveysController {
 
   @Get(":id")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.view")
+  @RequirePermissions("sites:view")
   async getSurvey(@Param("id") id: string, @CurrentSession() session: TenantSession) {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     return this.surveysService.getSurvey(tenantId, id);
@@ -102,7 +102,7 @@ class SurveysController {
 
   @Patch(":id")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.manage")
+  @RequirePermissions("sites:manage")
   async updateDraft(
     @Param("id") id: string,
     @Body() body: unknown,
@@ -153,7 +153,7 @@ class SurveyRoomsController {
 
   @Get()
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.view")
+  @RequirePermissions("sites:view")
   async listRooms(
     @Param("surveyId") surveyId: string,
     @CurrentSession() session: TenantSession,
@@ -164,7 +164,7 @@ class SurveyRoomsController {
 
   @Post()
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.manage")
+  @RequirePermissions("sites:manage")
   async create(
     @Param("surveyId") surveyId: string,
     @Body() body: unknown,
@@ -178,7 +178,7 @@ class SurveyRoomsController {
 
   @Get(":roomId")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.view")
+  @RequirePermissions("sites:view")
   async getRoom(
     @Param("surveyId") surveyId: string,
     @Param("roomId") roomId: string,
@@ -190,7 +190,7 @@ class SurveyRoomsController {
 
   @Patch(":roomId")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.manage")
+  @RequirePermissions("sites:manage")
   async updateRoom(
     @Param("surveyId") surveyId: string,
     @Param("roomId") roomId: string,
@@ -204,7 +204,7 @@ class SurveyRoomsController {
 
   @Delete(":roomId")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.manage")
+  @RequirePermissions("sites:manage")
   async deleteRoom(
     @Param("surveyId") surveyId: string,
     @Param("roomId") roomId: string,
@@ -232,7 +232,7 @@ class MeasurementComponentsController {
 
   @Post()
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.manage")
+  @RequirePermissions("sites:manage")
   async createComponent(
     @Param("surveyId") surveyId: string,
     @Param("roomId") roomId: string,
@@ -247,7 +247,7 @@ class MeasurementComponentsController {
 
   @Patch(":componentId")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.manage")
+  @RequirePermissions("sites:manage")
   async updateComponent(
     @Param("surveyId") surveyId: string,
     @Param("roomId") roomId: string,
@@ -262,7 +262,7 @@ class MeasurementComponentsController {
 
   @Delete(":componentId")
   @UseGuards(AuthGuard, PermissionsGuard)
-  @RequirePermissions("sites.manage")
+  @RequirePermissions("sites:manage")
   async deleteComponent(
     @Param("surveyId") surveyId: string,
     @Param("roomId") roomId: string,

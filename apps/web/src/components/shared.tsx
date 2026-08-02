@@ -5,12 +5,12 @@ import { ChevronRight, FileX } from "lucide-react";
 
 export function Breadcrumbs({ items }: { items: { label: string; href?: string }[] }) {
   return (
-    <nav className="flex items-center space-x-2 text-sm text-slate-500 mb-4">
+    <nav className="mb-4 flex items-center space-x-2 text-sm text-slate-500">
       {items.map((item, index) => (
         <React.Fragment key={index}>
           {index > 0 && <ChevronRight className="h-4 w-4 text-slate-400" />}
           {item.href ? (
-            <Link href={item.href} className="hover:text-slate-900 transition-colors font-medium">
+            <Link href={item.href} className="font-medium transition-colors hover:text-slate-900">
               {item.label}
             </Link>
           ) : (
@@ -32,12 +32,12 @@ export function PageHeader({
   actions?: React.ReactNode; 
 }) {
   return (
-    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+    <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-center">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-950 tracking-tight">{title}</h1>
+        <h1 className="text-headline-md tracking-tight text-slate-950">{title}</h1>
         {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
       </div>
-      {actions && <div className="flex items-center space-x-3 shrink-0">{actions}</div>}
+      {actions && <div className="flex shrink-0 items-center space-x-3">{actions}</div>}
     </div>
   );
 }
@@ -45,7 +45,7 @@ export function PageHeader({
 export function StatusBadge({ status, color }: { status: string; color?: "slate" | "green" | "blue" | "amber" | "red" }) {
   const colorMap = {
     slate: "bg-slate-100 text-slate-700 border-slate-200",
-    green: "bg-green-50 text-green-700 border-green-200",
+    green: "bg-emerald-50 text-emerald-700 border-emerald-200",
     blue: "bg-blue-50 text-blue-700 border-blue-200",
     amber: "bg-amber-50 text-amber-700 border-amber-200",
     red: "bg-red-50 text-red-700 border-red-200",
@@ -54,7 +54,7 @@ export function StatusBadge({ status, color }: { status: string; color?: "slate"
   const c = color || "slate";
   
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${colorMap[c]}`}>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${colorMap[c]}`}>
       {status}
     </span>
   );
@@ -62,11 +62,11 @@ export function StatusBadge({ status, color }: { status: string; color?: "slate"
 
 export function SummaryStrip({ items }: { items: { label: string; value: React.ReactNode }[] }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 py-4 px-5 bg-white border border-slate-200 rounded-lg shadow-sm mb-6">
+    <div className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-stitch md:grid-cols-4 lg:grid-cols-6">
       {items.map((item, i) => (
         <div key={i} className="flex flex-col">
-          <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{item.label}</span>
-          <span className="mt-1 text-sm font-medium text-slate-900">{item.value}</span>
+          <span className="text-label-caps uppercase text-slate-500">{item.label}</span>
+          <span className="mt-1 text-sm font-semibold text-slate-900">{item.value}</span>
         </div>
       ))}
     </div>
@@ -81,12 +81,12 @@ export function DataTable({
   children: React.ReactNode; 
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white shadow-sm">
-      <table className="min-w-full divide-y divide-slate-200 text-sm">
-        <thead className="bg-slate-50">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-stitch">
+      <table className="min-w-full divide-y divide-slate-200 text-table-data">
+        <thead className="sticky top-0 bg-slate-50/90 backdrop-blur">
           <tr>
             {headers.map((h, i) => (
-              <th key={i} className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider whitespace-nowrap">
+              <th key={i} className="whitespace-nowrap px-3 py-2.5 text-left text-label-caps uppercase text-slate-600">
                 {h}
               </th>
             ))}
@@ -110,10 +110,10 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 px-6 py-16 text-center bg-slate-50/50">
-      <FileX className="h-10 w-10 text-slate-400 mb-4" />
-      <h3 className="text-base font-semibold text-slate-900 mb-1">{title}</h3>
-      <p className="text-sm text-slate-500 mb-6 max-w-sm">{description}</p>
+    <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/80 px-6 py-16 text-center">
+      <FileX className="mb-4 h-10 w-10 text-slate-400" />
+      <h3 className="mb-1 text-base font-semibold text-slate-900">{title}</h3>
+      <p className="mb-6 max-w-sm text-sm text-slate-500">{description}</p>
       {action}
     </div>
   );
@@ -130,7 +130,7 @@ export function Money({ amount, currency = "GBP" }: { amount: number | null | un
 }
 
 export function FilterBar({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center gap-3 p-4 bg-slate-50 border-b border-slate-200">{children}</div>;
+  return <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50/80 p-4">{children}</div>;
 }
 
 export function LoadingSkeleton({ className = "h-4 w-full bg-slate-200 animate-pulse rounded" }: { className?: string }) {
@@ -143,8 +143,8 @@ export function ActivityTimeline({ items }: { items: { id: string; user: string;
       {items.map((item, i) => (
         <div key={item.id} className="flex gap-4">
           <div className="relative mt-1">
-            {i !== items.length - 1 && <div className="absolute left-2 top-2 -bottom-6 w-0.5 bg-slate-200" />}
-            <div className="relative h-4 w-4 rounded-full border-2 border-slate-300 bg-white" />
+            {i !== items.length - 1 && <div className="absolute -bottom-6 left-2 top-2 w-0.5 bg-slate-200" />}
+            <div className="relative h-4 w-4 rounded-full border-2 border-emerald-500 bg-white" />
           </div>
           <div>
             <p className="text-sm font-medium text-slate-900">{item.user} <span className="font-normal text-slate-500">{item.action}</span></p>
@@ -158,7 +158,7 @@ export function ActivityTimeline({ items }: { items: { id: string; user: string;
 
 export function RecordTabs({ tabs, activeTab, onChange }: { tabs: string[]; activeTab: string; onChange: (tab: string) => void }) {
   return (
-    <div className="border-b border-slate-200 mb-6">
+    <div className="mb-6 border-b border-slate-200">
       <nav className="-mb-px flex space-x-8">
         {tabs.map((tab) => (
           <button
@@ -166,7 +166,7 @@ export function RecordTabs({ tabs, activeTab, onChange }: { tabs: string[]; acti
             onClick={() => onChange(tab)}
             className={`whitespace-nowrap pb-4 px-1 border-b-2 font-medium text-sm ${
               activeTab === tab 
-                ? "border-slate-900 text-slate-900" 
+                ? "border-emerald-600 text-slate-900" 
                 : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
             }`}
           >
@@ -180,7 +180,7 @@ export function RecordTabs({ tabs, activeTab, onChange }: { tabs: string[]; acti
 
 export function StickyActionBar({ children }: { children: React.ReactNode }) {
   return (
-    <div className="sticky bottom-0 z-10 p-4 mt-6 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] flex justify-end gap-3 rounded-b-xl">
+    <div className="sticky bottom-0 z-10 mt-6 flex justify-end gap-3 rounded-b-xl border-t border-slate-200 bg-white p-4 shadow-[0_-4px_12px_rgba(15,23,42,0.08)]">
       {children}
     </div>
   );

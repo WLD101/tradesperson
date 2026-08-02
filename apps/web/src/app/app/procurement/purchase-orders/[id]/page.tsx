@@ -139,6 +139,51 @@ export default async function PurchaseOrderDetailPage({
             )}
           </div>
 
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <h2 className="text-lg font-medium text-slate-900">Goods Receipts</h2>
+              {permissions.canCreateReceipt && (purchaseOrder.status === "ISSUED" || purchaseOrder.status === "ACKNOWLEDGED" || purchaseOrder.status === "PARTIALLY_FULFILLED") ? (
+                <a
+                  href={`/app/procurement/purchase-orders/${purchaseOrder.id}/goods-receipts/new`}
+                  className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50"
+                >
+                  Receive Goods
+                </a>
+              ) : null}
+            </div>
+            {purchaseOrder.goodsReceipts?.length ? (
+              <DataTable
+                headers={[
+                  "Receipt #",
+                  "Status",
+                  "Received",
+                  "Warehouse",
+                ]}
+              >
+                {purchaseOrder.goodsReceipts.map((receipt) => (
+                  <tr key={receipt.id} className="hover:bg-slate-50">
+                    <td className="px-4 py-3">
+                      <a href={`/app/procurement/goods-receipts/${receipt.id}`} className="font-medium text-blue-600 hover:underline">
+                        {receipt.receiptNumber}
+                      </a>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <StatusBadge status={receipt.status} color={getStatusColor(receipt.status)} />
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <DateDisplay date={receipt.receivedAt} />
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-slate-700">
+                      {receipt.warehouse?.name || "-"}
+                    </td>
+                  </tr>
+                ))}
+              </DataTable>
+            ) : (
+              <div className="px-4 py-10 text-sm text-slate-500">No goods receipts have been recorded for this purchase order.</div>
+            )}
+          </div>
+
           {purchaseOrder.internalNotes ? (
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <h3 className="mb-2 text-sm font-semibold text-slate-900">Internal Notes</h3>

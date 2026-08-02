@@ -1,7 +1,15 @@
 import { execSync } from 'child_process';
 import { PrismaClient } from '@prisma/client';
 
-const DB_URL = "postgresql://postgres:postgres@localhost:55432/tradesperson_phased_seed_test?schema=public";
+function buildLocalTestDatabaseUrl(databaseName: string) {
+  const url = new URL(`postgresql://localhost:55432/${databaseName}`);
+  url.username = 'postgres';
+  url.password = 'postgres';
+  url.searchParams.set('schema', 'public');
+  return url.toString();
+}
+
+const DB_URL = buildLocalTestDatabaseUrl('tradesperson_phased_seed_test');
 process.env.DATABASE_URL = DB_URL;
 process.env.DIRECT_URL = DB_URL;
 

@@ -24,6 +24,13 @@ import { EstimatesModule } from "./estimates.module";
 import { QuotesModule } from "./quotes.module";
 import { JobsModule } from "./jobs.module";
 import { InventoryModule } from "./inventory.module";
+import { StorageModule } from "./storage/storage.module";
+import { FlooringModule } from "./industries/flooring/flooring.module";
+import { BillingModule } from "./billing/billing.module";
+import { PortalModule } from "./portal/portal.module";
+import { EventsModule } from "./events/events.module";
+import { NotificationsModule } from "./notifications/notifications.module";
+import { SearchModule } from "./search.module";
 
 @Module({
   imports: [
@@ -51,6 +58,13 @@ import { InventoryModule } from "./inventory.module";
     QuotesModule,
     JobsModule,
     InventoryModule,
+    StorageModule,
+    FlooringModule,
+    BillingModule,
+    PortalModule,
+    EventsModule,
+    NotificationsModule,
+    SearchModule,
   ],
   providers: [{ provide: "APP_URL", useValue: loadEnv().API_URL }],
 })

@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { Button, Card, Input } from "@tradesperson/ui";
 import { apiFetch } from "@/lib/api";
 
@@ -30,7 +31,7 @@ export default async function CustomersPage() {
       companyName: string | null;
       primaryEmail: string | null;
       primaryPhone: string | null;
-      properties: Array<{ id: string; label: string; city: string | null }>;
+      sites: Array<{ id: string; label: string; city: string | null }>;
     }>
   >("/api/v1/customers");
 
@@ -49,22 +50,22 @@ export default async function CustomersPage() {
         <div className="mt-4 space-y-3">
           {customers.map((customer) => (
             (() => {
-              const properties = customer.properties ?? [];
+              const sites = customer.sites ?? [];
               return (
             <div
               key={customer.id}
               className="rounded-xl border border-slate-200 px-4 py-4"
             >
-              <p className="font-medium text-slate-900">
+              <Link className="font-medium text-slate-900 hover:text-blue-700" href={`/app/crm/customers/${customer.id}`}>
                 {customer.displayName}
-              </p>
+              </Link>
               <p className="text-sm text-slate-500">
                 {customer.customerType} • {customer.primaryEmail ?? "No email"}{" "}
                 • {customer.primaryPhone ?? "No phone"}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
-                {properties.length ? (
-                  properties.map((property) => (
+                {sites.length ? (
+                  sites.map((property) => (
                     <span
                       key={property.id}
                       className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700"

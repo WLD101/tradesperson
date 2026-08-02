@@ -1,7 +1,17 @@
 import { randomUUID } from "node:crypto";
 
 const testDbName = "tradesperson_erp_isolation_test";
-const defaultTestDatabaseUrl = `postgresql://postgres:postgres@localhost:55432/${testDbName}`;
+const localPostgresUser = "postgres";
+const localPostgresPassword = "postgres";
+
+export const buildLocalTestDatabaseUrl = (databaseName: string) => {
+  const url = new URL(`postgresql://localhost:55432/${databaseName}`);
+  url.username = localPostgresUser;
+  url.password = localPostgresPassword;
+  return url.toString();
+};
+
+const defaultTestDatabaseUrl = buildLocalTestDatabaseUrl(testDbName);
 
 type EnsureTestEnvOptions = {
   requireExplicitDatabaseUrl?: boolean;

@@ -1,8 +1,5 @@
 import { hashPassword, hashToken } from "@tradesperson/auth";
 import { EstimateLineType, Prisma, PrismaClient, RoleScope, SubscriptionStatus } from "@prisma/client";
-import { parse } from "papaparse";
-import { readFileSync } from "fs";
-import { join } from "path";
 import { seedProcurement } from "./seed-procurement";
 
 const prisma = new PrismaClient();
@@ -519,6 +516,7 @@ async function main() {
       tradingName: "Example Flooring",
       businessEmail: "hello@exampleflooring.local",
       businessPhone: "+44 161 555 0100",
+      activeIndustries: ["FLOORING"],
       city: "Manchester",
       postcode: "M1 1AA",
     },
@@ -529,6 +527,7 @@ async function main() {
       tradingName: "Example Flooring",
       businessEmail: "hello@exampleflooring.local",
       businessPhone: "+44 161 555 0100",
+      activeIndustries: ["FLOORING"],
       city: "Manchester",
       postcode: "M1 1AA",
     },
@@ -825,13 +824,36 @@ async function main() {
 
   const categoryDefinitions: Array<{ slug: string; name: string }> = [
     { slug: "carpet", name: "Carpet" },
+    { slug: "carpet-roll", name: "Carpet Roll" },
+    { slug: "carpet-tiles", name: "Carpet Tiles" },
+    { slug: "commercial-carpet", name: "Commercial Carpet" },
     { slug: "lvt", name: "Luxury Vinyl Tile" },
+    { slug: "lvp", name: "Luxury Vinyl Plank" },
     { slug: "sheet-vinyl", name: "Sheet Vinyl" },
+    { slug: "safety-flooring", name: "Safety Flooring" },
     { slug: "laminate", name: "Laminate" },
+    { slug: "laminate-planks", name: "Laminate Planks" },
+    { slug: "oak-laminate", name: "Oak Laminate" },
+    { slug: "herringbone", name: "Herringbone" },
+    { slug: "chevron", name: "Chevron" },
+    { slug: "spc-flooring", name: "SPC Flooring" },
+    { slug: "wpc-flooring", name: "WPC Flooring" },
+    { slug: "engineered-wood", name: "Engineered Wood" },
+    { slug: "solid-wood", name: "Solid Wood" },
+    { slug: "parquet", name: "Parquet" },
+    { slug: "rubber-flooring", name: "Rubber Flooring" },
+    { slug: "cork-flooring", name: "Cork Flooring" },
+    { slug: "bamboo-flooring", name: "Bamboo Flooring" },
+    { slug: "entrance-matting", name: "Entrance Matting" },
     { slug: "underlay", name: "Underlay" },
     { slug: "adhesive", name: "Adhesive" },
     { slug: "smoothing-compound", name: "Smoothing Compound" },
+    { slug: "primer", name: "Primer" },
+    { slug: "moisture-barrier", name: "Moisture Barrier" },
     { slug: "door-profile", name: "Door Profile" },
+    { slug: "stair-nosing", name: "Stair Nosing" },
+    { slug: "trims", name: "Trims" },
+    { slug: "tools-accessories", name: "Tools & Accessories" },
   ];
 
   const categoryRecords = await Promise.all(
@@ -2466,9 +2488,9 @@ async function main() {
     },
   });
 
-  await prisma.stockBalance.createMany({
-    data: [
-      {
+  const openingStockLines = [
+    {
+      balance: {
         tenantId: tenant.id,
         branchId: headOffice.id,
         warehouseId: defaultWarehouse.id,
@@ -2478,7 +2500,10 @@ async function main() {
         unit: "SQM",
         onHandQuantity: "45.0000",
       },
-      {
+      unitCost: "8.0000",
+    },
+    {
+      balance: {
         tenantId: tenant.id,
         branchId: headOffice.id,
         warehouseId: defaultWarehouse.id,
@@ -2488,8 +2513,40 @@ async function main() {
         unit: "EACH",
         onHandQuantity: "20.0000",
       },
-    ],
-  });
+      unitCost: "3.5000",
+    },
+  ] satisfies Array<{
+    balance: Prisma.StockBalanceUncheckedCreateInput;
+    unitCost: string;
+  }>;
+
+  for (const [index, line] of openingStockLines.entries()) {
+    const balance = await prisma.stockBalance.create({ data: line.balance });
+    const quantity = new Prisma.Decimal(line.balance.onHandQuantity as string);
+    const unitCost = new Prisma.Decimal(line.unitCost);
+    await prisma.inventoryMovement.create({
+      data: {
+        tenantId: tenant.id,
+        branchId: headOffice.id,
+        warehouseId: defaultWarehouse.id,
+        stockBalanceId: balance.id,
+        productId: line.balance.productId,
+        productVariantId: line.balance.productVariantId ?? null,
+        supplierProductId: line.balance.supplierProductId ?? null,
+        type: "ADJUSTMENT",
+        condition: "USABLE",
+        quantity,
+        unit: line.balance.unit,
+        unitCost,
+        value: quantity.mul(unitCost),
+        sourceType: "seed-opening-balance",
+        sourceId: balance.id,
+        idempotencyKey: `seed:tenant-a:opening-stock:${index}`,
+        notes: "Seeded opening stock movement for reconciliation and job costing.",
+        createdById: owner.id,
+      },
+    });
+  }
 
   await prisma.numberSequence.update({
     where: { tenantId_key: { tenantId: tenant.id, key: "job" } },
@@ -2520,6 +2577,7 @@ async function main() {
       legalName: "Tenant B Flooring Ltd",
       tradingName: "Tenant B Flooring",
       businessEmail: "hello@tenantb-flooring.local",
+      activeIndustries: ["FLOORING"],
       city: "Birmingham",
       postcode: "B1 1BB",
     },
@@ -2529,6 +2587,7 @@ async function main() {
       legalName: "Tenant B Flooring Ltd",
       tradingName: "Tenant B Flooring",
       businessEmail: "hello@tenantb-flooring.local",
+      activeIndustries: ["FLOORING"],
       city: "Birmingham",
       postcode: "B1 1BB",
     },
@@ -2702,7 +2761,7 @@ async function main() {
       isDefault: true,
     },
   });
-  await prisma.stockBalance.create({
+  const tenantBStockBalance = await prisma.stockBalance.create({
     data: {
       tenantId: tenantB.id,
       branchId: tenantBBranch.id,
@@ -2711,6 +2770,27 @@ async function main() {
       supplierProductId: tenantBSupplierProduct.id,
       unit: "SQM",
       onHandQuantity: "18.0000",
+    },
+  });
+  await prisma.inventoryMovement.create({
+    data: {
+      tenantId: tenantB.id,
+      branchId: tenantBBranch.id,
+      warehouseId: tenantBWarehouse.id,
+      stockBalanceId: tenantBStockBalance.id,
+      productId: tenantBProduct.id,
+      supplierProductId: tenantBSupplierProduct.id,
+      type: "ADJUSTMENT",
+      condition: "USABLE",
+      quantity: "18.0000",
+      unit: "SQM",
+      unitCost: "7.5000",
+      value: "135.0000",
+      sourceType: "seed-opening-balance",
+      sourceId: tenantBStockBalance.id,
+      idempotencyKey: "seed:tenant-b:opening-stock:0",
+      notes: "Seeded Tenant B opening stock movement for reconciliation and isolation coverage.",
+      createdById: tenantBOwner.id,
     },
   });
   const tenantBJob = await prisma.job.create({

@@ -22,7 +22,16 @@ const JOB_INCLUDE: any = {
   branch: { select: { id: true, name: true, branchCode: true } },
   customer: { select: { id: true, displayName: true, primaryEmail: true, primaryPhone: true } },
   site: { select: { id: true, label: true, addressLine1: true, city: true, postcode: true } },
-  quote: { select: { id: true, quoteNumber: true, status: true, grandTotal: true } },
+  quote: {
+    select: {
+      id: true,
+      quoteNumber: true,
+      status: true,
+      grandTotal: true,
+      estimate: { select: { id: true, materialCost: true, labourCost: true, supplierCost: true } },
+    },
+  },
+  assignedInstaller: { select: { id: true, firstName: true, lastName: true, email: true } },
   invoices: {
     orderBy: [{ createdAt: "desc" }],
     include: {
@@ -103,8 +112,97 @@ export class JobsService {
     return { items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
   }
 
+  async listSchedule(session: TenantSession, query: any) {
+    const { tenantId } = this.tenantAccess.ensureTenant(session);
+    if (query.end <= query.start) {
+      throw new BadRequestException("Schedule end must be after schedule start.");
+    }
+    const branchFilter = query.branchId
+      ? { branchId: await this.branchAccess.ensureAuthorizedBranch(session, query.branchId, tenantId) }
+      : this.branchAccess.branchWhere(session, tenantId);
+    const searchWhere = query.search
+      ? {
+          OR: [
+            { jobNumber: { contains: query.search, mode: "insensitive" as const } },
+            { title: { contains: query.search, mode: "insensitive" as const } },
+            { customer: { displayName: { contains: query.search, mode: "insensitive" as const } } },
+            { site: { label: { contains: query.search, mode: "insensitive" as const } } },
+            { site: { postcode: { contains: query.search, mode: "insensitive" as const } } },
+          ],
+        }
+      : {};
+    const statusWhere = query.status ? { status: query.status as JobStatus } : {};
+    const installerWhere = query.installerId ? { assignedInstallerId: query.installerId } : {};
+    const baseWhere: Prisma.JobWhereInput = {
+      tenantId,
+      ...branchFilter,
+      ...searchWhere,
+      ...statusWhere,
+    };
+
+    const [scheduledJobs, unscheduledJobs, installers] = await this.prisma.client.$transaction([
+      this.prisma.client.job.findMany({
+        where: {
+          ...baseWhere,
+          ...installerWhere,
+          scheduledStart: { lt: query.end },
+          scheduledEnd: { gt: query.start },
+          status: query.status ? (query.status as JobStatus) : { notIn: [JobStatus.CANCELLED] },
+        },
+        orderBy: [{ scheduledStart: "asc" }, { jobNumber: "asc" }],
+        take: 250,
+        include: JOB_INCLUDE,
+      }),
+      this.prisma.client.job.findMany({
+        where: {
+          ...baseWhere,
+          status: query.status
+            ? (query.status as JobStatus)
+            : { notIn: [JobStatus.COMPLETED, JobStatus.CANCELLED] },
+          OR: [{ scheduledStart: null }, { scheduledEnd: null }, { assignedInstallerId: null }],
+        },
+        orderBy: [{ createdAt: "desc" }],
+        take: query.unscheduledLimit ?? 25,
+        include: JOB_INCLUDE,
+      }),
+      this.prisma.client.tenantMembership.findMany({
+        where: {
+          tenantId,
+          status: "ACTIVE",
+          ...(query.branchId ? { OR: [{ defaultBranchId: query.branchId }, { defaultBranchId: null }, { isOwner: true }] } : {}),
+        },
+        orderBy: [{ createdAt: "asc" }],
+        include: {
+          user: { select: { id: true, firstName: true, lastName: true, email: true, status: true } },
+          defaultBranch: { select: { id: true, name: true, branchCode: true } },
+          roles: { include: { role: { select: { key: true, name: true } } } },
+        },
+      }),
+    ]);
+
+    return {
+      range: { start: query.start, end: query.end },
+      installers: installers.map((membership) => ({
+        id: membership.user.id,
+        membershipId: membership.id,
+        name: `${membership.user.firstName} ${membership.user.lastName}`.trim(),
+        email: membership.user.email,
+        status: membership.status,
+        userStatus: membership.user.status,
+        isOwner: membership.isOwner,
+        defaultBranch: membership.defaultBranch,
+        roleKeys: membership.roles.map((membershipRole) => membershipRole.role.key),
+      })),
+      scheduledJobs,
+      unscheduledJobs,
+      totalScheduled: scheduledJobs.length,
+      totalUnscheduled: unscheduledJobs.length,
+    };
+  }
+
   async getJob(session: TenantSession, jobId: string) {
-    return this.ensureJob(session, jobId, { include: JOB_INCLUDE });
+    const job = await this.ensureJob(session, jobId, { include: JOB_INCLUDE });
+    return this.withProfitability(job);
   }
 
   async createFromQuote(session: TenantSession, quoteId: string, input: any) {
@@ -123,6 +221,28 @@ export class JobsService {
     if (!quote) throw new NotFoundException("Resource not found.");
     if (quote.status !== QuoteStatus.APPROVED) {
       throw new BadRequestException("Only approved quotes can be converted to jobs.");
+    }
+    if ((input.scheduledStart && !input.scheduledEnd) || (!input.scheduledStart && input.scheduledEnd)) {
+      throw new BadRequestException("Scheduled start and end must be provided together.");
+    }
+    if (input.scheduledStart && input.scheduledEnd && input.scheduledEnd <= input.scheduledStart) {
+      throw new BadRequestException("Scheduled end must be after scheduled start.");
+    }
+
+    const assignedInstallerId = this.trimOrNull(input.assignedInstallerId);
+    const installationTeamName = this.trimOrNull(input.installationTeamName);
+    if (assignedInstallerId) {
+      await this.ensureAssignableInstaller(tenantId, quote.branchId, assignedInstallerId);
+    }
+    if (input.scheduledStart && input.scheduledEnd) {
+      await this.ensureScheduleAvailable({
+        tenantId,
+        branchId: quote.branchId,
+        scheduledStart: input.scheduledStart,
+        scheduledEnd: input.scheduledEnd,
+        assignedInstallerId,
+        installationTeamName,
+      });
     }
 
     const job = await this.prisma.client.$transaction(async (tx) => {
@@ -143,6 +263,8 @@ export class JobsService {
           depositPaid: quote.depositPaid,
           scheduledStart: input.scheduledStart ?? null,
           scheduledEnd: input.scheduledEnd ?? null,
+          assignedInstallerId,
+          installationTeamName,
           accessNotes: this.trimOrNull(input.accessNotes),
           workNotes: this.trimOrNull(input.workNotes),
           createdById: session.user.id,
@@ -160,7 +282,7 @@ export class JobsService {
       action: "job:create",
       entityType: "job",
       entityId: job.id,
-      newValues: { jobNumber: job.jobNumber, quoteId },
+      newValues: { jobNumber: job.jobNumber, quoteId, assignedInstallerId, installationTeamName },
     });
     return job;
   }
@@ -428,6 +550,7 @@ export class JobsService {
       for (const { requirement, reservation } of reservations) {
         const remainingToIssue = this.money(reservation.reservedQuantity).minus(this.money(reservation.issuedQuantity));
         if (remainingToIssue.lessThanOrEqualTo(0)) continue;
+        const unitCost = await this.averageUnitCostForStockBalance(tx, job.tenantId, reservation.stockBalanceId);
 
         await tx.stockBalance.update({
           where: { id: reservation.stockBalanceId },
@@ -461,6 +584,8 @@ export class JobsService {
             condition: InventoryMovementCondition.USABLE,
             quantity: remainingToIssue,
             unit: reservation.unit,
+            unitCost,
+            value: remainingToIssue.times(unitCost),
             sourceType: "stock-reservation",
             sourceId: reservation.id,
             idempotencyKey: `${reservation.id}:issue`,
@@ -559,6 +684,7 @@ export class JobsService {
         if (totalQuantity.greaterThan(remainingReturnable)) {
           throw new BadRequestException("Return quantity cannot exceed the remaining issued quantity.");
         }
+        const unitCost = await this.averageIssueUnitCostForReservation(tx, job.tenantId, job.id, reservation.id);
 
         if (usableQuantity.greaterThan(0)) {
           await tx.stockBalance.update({
@@ -583,6 +709,8 @@ export class JobsService {
               condition: InventoryMovementCondition.USABLE,
               quantity: usableQuantity,
               unit: reservation.unit,
+              unitCost,
+              value: usableQuantity.times(unitCost),
               sourceType: "stock-reservation",
               sourceId: reservation.id,
               idempotencyKey: idempotencyKey ? `${idempotencyKey}:return:${index}:usable` : null,
@@ -612,6 +740,8 @@ export class JobsService {
               condition: InventoryMovementCondition.DAMAGED,
               quantity: damagedQuantity,
               unit: reservation.unit,
+              unitCost,
+              value: damagedQuantity.times(unitCost),
               sourceType: "stock-reservation",
               sourceId: reservation.id,
               idempotencyKey: idempotencyKey ? `${idempotencyKey}:return:${index}:damaged` : null,
@@ -654,6 +784,20 @@ export class JobsService {
     if (input.scheduledEnd <= input.scheduledStart) {
       throw new BadRequestException("Scheduled end must be after scheduled start.");
     }
+    const assignedInstallerId = this.trimOrNull(input.assignedInstallerId);
+    const installationTeamName = this.trimOrNull(input.installationTeamName);
+    if (assignedInstallerId) {
+      await this.ensureAssignableInstaller(job.tenantId, job.branchId, assignedInstallerId);
+    }
+    await this.ensureScheduleAvailable({
+      tenantId: job.tenantId,
+      branchId: job.branchId,
+      scheduledStart: input.scheduledStart,
+      scheduledEnd: input.scheduledEnd,
+      assignedInstallerId,
+      installationTeamName,
+      excludeJobId: job.id,
+    });
 
     const updated = await this.prisma.client.job.update({
       where: { id: job.id },
@@ -661,6 +805,8 @@ export class JobsService {
         status: JobStatus.SCHEDULED,
         scheduledStart: input.scheduledStart,
         scheduledEnd: input.scheduledEnd,
+        assignedInstallerId,
+        installationTeamName,
         ...(input.accessNotes !== undefined ? { accessNotes: this.trimOrNull(input.accessNotes) } : {}),
         ...(input.workNotes !== undefined ? { workNotes: this.trimOrNull(input.workNotes) } : {}),
         updatedById: session.user.id,
@@ -674,8 +820,62 @@ export class JobsService {
       action: "job:schedule",
       entityType: "job",
       entityId: job.id,
-      previousValues: { scheduledStart: job.scheduledStart, scheduledEnd: job.scheduledEnd },
-      newValues: { scheduledStart: updated.scheduledStart, scheduledEnd: updated.scheduledEnd },
+      previousValues: {
+        scheduledStart: job.scheduledStart,
+        scheduledEnd: job.scheduledEnd,
+        assignedInstallerId: job.assignedInstallerId,
+        installationTeamName: job.installationTeamName,
+      },
+      newValues: {
+        scheduledStart: updated.scheduledStart,
+        scheduledEnd: updated.scheduledEnd,
+        assignedInstallerId: updated.assignedInstallerId,
+        installationTeamName: updated.installationTeamName,
+      },
+    });
+
+    return updated;
+  }
+
+  async unscheduleJob(session: TenantSession, jobId: string) {
+    const job = await this.ensureJob(session, jobId);
+    if (job.status === JobStatus.CANCELLED || job.status === JobStatus.COMPLETED) {
+      throw new BadRequestException("Completed or cancelled jobs cannot be returned to the unscheduled queue.");
+    }
+
+    const updated = await this.prisma.client.job.update({
+      where: { id: job.id },
+      data: {
+        status: JobStatus.DRAFT,
+        scheduledStart: null,
+        scheduledEnd: null,
+        assignedInstallerId: null,
+        installationTeamName: null,
+        updatedById: session.user.id,
+      },
+      include: JOB_INCLUDE,
+    });
+
+    await this.audit.record({
+      tenantId: job.tenantId,
+      actorUserId: session.user.id,
+      action: "job:unschedule",
+      entityType: "job",
+      entityId: job.id,
+      previousValues: {
+        scheduledStart: job.scheduledStart,
+        scheduledEnd: job.scheduledEnd,
+        assignedInstallerId: job.assignedInstallerId,
+        installationTeamName: job.installationTeamName,
+        status: job.status,
+      },
+      newValues: {
+        scheduledStart: null,
+        scheduledEnd: null,
+        assignedInstallerId: null,
+        installationTeamName: null,
+        status: updated.status,
+      },
     });
 
     return updated;
@@ -857,6 +1057,60 @@ export class JobsService {
     return updated;
   }
 
+  async generateInvoicePdf(session: TenantSession, invoiceId: string) {
+    const { tenantId } = this.tenantAccess.ensureTenant(session);
+    const invoice = await this.prisma.client.invoice.findFirst({
+      where: {
+        id: invoiceId,
+        tenantId,
+        job: this.branchAccess.branchWhere(session, tenantId),
+      },
+      include: {
+        tenant: { select: { name: true, businessEmail: true, businessPhone: true, addressLine1: true, city: true, postcode: true } },
+        customer: { select: { displayName: true, companyName: true, primaryEmail: true, primaryPhone: true } },
+        site: { select: { label: true, addressLine1: true, city: true, postcode: true } },
+        job: { select: { jobNumber: true, title: true, workNotes: true } },
+        payments: { orderBy: [{ paidAt: "asc" }] },
+      },
+    });
+    if (!invoice) throw new NotFoundException("Resource not found.");
+
+    const lines = [
+      `${invoice.tenant.name}`,
+      [invoice.tenant.addressLine1, invoice.tenant.city, invoice.tenant.postcode].filter(Boolean).join(", "),
+      [invoice.tenant.businessEmail, invoice.tenant.businessPhone].filter(Boolean).join(" / "),
+      "",
+      `Invoice ${invoice.invoiceNumber}`,
+      `Job ${invoice.job.jobNumber}${invoice.job.title ? ` - ${invoice.job.title}` : ""}`,
+      `Issued ${invoice.issuedAt ? invoice.issuedAt.toISOString().slice(0, 10) : "-"}`,
+      `Due ${invoice.dueDate ? invoice.dueDate.toISOString().slice(0, 10) : "-"}`,
+      "",
+      "Bill to",
+      invoice.customer.displayName,
+      invoice.customer.companyName ?? "",
+      [invoice.customer.primaryEmail, invoice.customer.primaryPhone].filter(Boolean).join(" / "),
+      "",
+      "Site",
+      invoice.site.label,
+      [invoice.site.addressLine1, invoice.site.city, invoice.site.postcode].filter(Boolean).join(", "),
+      "",
+      `Subtotal: ${invoice.currency} ${this.money(invoice.subtotal).toFixed(2)}`,
+      `VAT: ${invoice.currency} ${this.money(invoice.vatAmount).toFixed(2)}`,
+      `Total: ${invoice.currency} ${this.money(invoice.total).toFixed(2)}`,
+      `Paid: ${invoice.currency} ${this.money(invoice.paidAmount).toFixed(2)}`,
+      `Balance due: ${invoice.currency} ${this.money(invoice.balanceDue).toFixed(2)}`,
+      "",
+      invoice.payments.length ? "Payments" : "Payments: none recorded",
+      ...invoice.payments.map((payment) =>
+        `${payment.paymentNumber}  ${payment.paidAt.toISOString().slice(0, 10)}  ${payment.method ?? "-"}  ${invoice.currency} ${this.money(payment.amount).toFixed(2)}`,
+      ),
+      "",
+      invoice.notes ? `Notes: ${invoice.notes}` : "",
+    ].filter((line) => line !== null);
+
+    return this.renderSimplePdf(lines);
+  }
+
   private async ensureJob(session: TenantSession, jobId: string, args?: Omit<Prisma.JobFindFirstArgs, "where">): Promise<any> {
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const job = await this.prisma.client.job.findFirst({
@@ -865,6 +1119,108 @@ export class JobsService {
     });
     if (!job) throw new NotFoundException("Resource not found.");
     return job;
+  }
+
+  private renderSimplePdf(lines: string[]) {
+    const escapePdfText = (value: string) =>
+      value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    const content = [
+      "BT",
+      "/F1 11 Tf",
+      "50 790 Td",
+      "14 TL",
+      ...lines.flatMap((line, index) => [
+        index === 0 ? "" : "T*",
+        `(${escapePdfText(line)}) Tj`,
+      ]).filter(Boolean),
+      "ET",
+    ].join("\n");
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      `<< /Length ${Buffer.byteLength(content, "utf8")} >>\nstream\n${content}\nendstream`,
+    ];
+    let pdf = "%PDF-1.4\n";
+    const offsets = [0];
+    objects.forEach((object, index) => {
+      offsets.push(Buffer.byteLength(pdf, "utf8"));
+      pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    });
+    const xrefOffset = Buffer.byteLength(pdf, "utf8");
+    pdf += `xref\n0 ${objects.length + 1}\n`;
+    pdf += "0000000000 65535 f \n";
+    for (let index = 1; index < offsets.length; index += 1) {
+      pdf += `${String(offsets[index]).padStart(10, "0")} 00000 n \n`;
+    }
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+    return Buffer.from(pdf, "utf8");
+  }
+
+  private async ensureAssignableInstaller(tenantId: string, branchId: string | null, installerId: string) {
+    const membership = await this.prisma.client.tenantMembership.findFirst({
+      where: {
+        tenantId,
+        userId: installerId,
+        status: "ACTIVE",
+      },
+      select: {
+        id: true,
+        isOwner: true,
+        defaultBranchId: true,
+        roles: { select: { role: { select: { key: true } } } },
+      },
+    });
+    if (!membership) {
+      throw new BadRequestException("Assigned installer must be an active member of this tenant.");
+    }
+
+    const hasAllBranchAccess =
+      membership.isOwner ||
+      membership.roles.some((membershipRole) => membershipRole.role.key === "BUSINESS_OWNER");
+    if (branchId && membership.defaultBranchId && membership.defaultBranchId !== branchId && !hasAllBranchAccess) {
+      throw new BadRequestException("Assigned installer is not available for this branch.");
+    }
+  }
+
+  private async ensureScheduleAvailable(input: {
+    tenantId: string;
+    branchId: string | null;
+    scheduledStart: Date;
+    scheduledEnd: Date;
+    assignedInstallerId?: string | null;
+    installationTeamName?: string | null;
+    excludeJobId?: string;
+  }) {
+    const teamName = this.trimOrNull(input.installationTeamName);
+    if (!input.assignedInstallerId && !teamName) {
+      return;
+    }
+
+    const where: Prisma.JobWhereInput = {
+      tenantId: input.tenantId,
+      branchId: input.branchId,
+      ...(input.excludeJobId ? { id: { not: input.excludeJobId } } : {}),
+        status: { notIn: [JobStatus.CANCELLED, JobStatus.COMPLETED] },
+        scheduledStart: { lt: input.scheduledEnd },
+        scheduledEnd: { gt: input.scheduledStart },
+        OR: [
+          ...(input.assignedInstallerId ? [{ assignedInstallerId: input.assignedInstallerId }] : []),
+          ...(teamName ? [{ installationTeamName: teamName }] : []),
+        ],
+    };
+
+    const conflict = await this.prisma.client.job.findFirst({
+      where,
+      select: { jobNumber: true, scheduledStart: true, scheduledEnd: true },
+    });
+
+    if (conflict) {
+      throw new BadRequestException(
+        `Installation slot overlaps ${conflict.jobNumber}. Choose another installer, team, or time.`,
+      );
+    }
   }
 
   private async allocateNumber(tx: PrismaTransaction, tenantId: string, key: string, prefix: string) {
@@ -955,6 +1311,103 @@ export class JobsService {
 
   private remainingToAllocate(requirement: { requiredQuantity: Prisma.Decimal; allocatedQuantity?: Prisma.Decimal | null }) {
     return this.money(requirement.requiredQuantity).minus(this.money(requirement.allocatedQuantity ?? 0));
+  }
+
+  private async withProfitability(job: any) {
+    const movements = await this.prisma.client.inventoryMovement.findMany({
+      where: {
+        tenantId: job.tenantId,
+        jobId: job.id,
+        type: { in: [InventoryMovementType.MATERIAL_ISSUE, InventoryMovementType.MATERIAL_RETURN] },
+      },
+      select: { type: true, condition: true, value: true },
+    });
+
+    const issuedMaterialCost = movements
+      .filter((movement) => movement.type === InventoryMovementType.MATERIAL_ISSUE)
+      .reduce((total, movement) => total.plus(movement.value), this.money(0));
+    const usableReturnCredit = movements
+      .filter((movement) =>
+        movement.type === InventoryMovementType.MATERIAL_RETURN &&
+        movement.condition === InventoryMovementCondition.USABLE,
+      )
+      .reduce((total, movement) => total.plus(movement.value), this.money(0));
+    const actualMaterialCost = Prisma.Decimal.max(issuedMaterialCost.minus(usableReturnCredit), this.money(0));
+    const estimatedMaterialCost = this.money(job.quote?.estimate?.materialCost ?? 0);
+    const labourCost = this.money(job.quote?.estimate?.labourCost ?? 0);
+    const totalCost = actualMaterialCost.greaterThan(0)
+      ? actualMaterialCost.plus(labourCost)
+      : estimatedMaterialCost.plus(labourCost);
+    const revenue = this.money(job.totalValue);
+    const grossProfit = revenue.minus(totalCost);
+    const grossMarginPercent = revenue.equals(0) ? this.money(0) : grossProfit.div(revenue).mul(100);
+    const invoicedTotal = (job.invoices ?? [])
+      .filter((invoice: any) => invoice.status !== InvoiceStatus.CANCELLED)
+      .reduce((total: Prisma.Decimal, invoice: any) => total.plus(invoice.total), this.money(0));
+    const paidAmount = (job.invoices ?? [])
+      .filter((invoice: any) => invoice.status !== InvoiceStatus.CANCELLED)
+      .reduce((total: Prisma.Decimal, invoice: any) => total.plus(invoice.paidAmount), this.money(0));
+    const balanceDue = (job.invoices ?? [])
+      .filter((invoice: any) => invoice.status !== InvoiceStatus.CANCELLED)
+      .reduce((total: Prisma.Decimal, invoice: any) => total.plus(invoice.balanceDue), this.money(0));
+
+    return {
+      ...job,
+      profitability: {
+        revenue,
+        invoicedTotal,
+        paidAmount,
+        balanceDue,
+        estimatedMaterialCost,
+        actualMaterialCost,
+        labourCost,
+        totalCost,
+        grossProfit,
+        grossMarginPercent,
+      },
+    };
+  }
+
+  private async averageUnitCostForStockBalance(tx: PrismaTransaction, tenantId: string, stockBalanceId: string) {
+    const receipts = await tx.inventoryMovement.findMany({
+      where: {
+        tenantId,
+        stockBalanceId,
+        type: { in: [InventoryMovementType.GOODS_RECEIPT, InventoryMovementType.ADJUSTMENT] },
+        condition: InventoryMovementCondition.USABLE,
+      },
+      select: { quantity: true, value: true, unitCost: true },
+    });
+    const quantity = receipts.reduce((total, movement) => total.plus(movement.quantity), this.money(0));
+    const value = receipts.reduce((total, movement) => total.plus(movement.value), this.money(0));
+    if (quantity.greaterThan(0) && value.greaterThanOrEqualTo(0)) {
+      return value.div(quantity);
+    }
+    return receipts[0]?.unitCost ?? this.money(0);
+  }
+
+  private async averageIssueUnitCostForReservation(
+    tx: PrismaTransaction,
+    tenantId: string,
+    jobId: string,
+    reservationId: string,
+  ) {
+    const issues = await tx.inventoryMovement.findMany({
+      where: {
+        tenantId,
+        jobId,
+        type: InventoryMovementType.MATERIAL_ISSUE,
+        sourceType: "stock-reservation",
+        sourceId: reservationId,
+      },
+      select: { quantity: true, value: true, unitCost: true },
+    });
+    const quantity = issues.reduce((total, movement) => total.plus(movement.quantity), this.money(0));
+    const value = issues.reduce((total, movement) => total.plus(movement.value), this.money(0));
+    if (quantity.greaterThan(0) && value.greaterThanOrEqualTo(0)) {
+      return value.div(quantity);
+    }
+    return issues[0]?.unitCost ?? this.money(0);
   }
 
   private money(value: number | string | Prisma.Decimal | null | undefined) {

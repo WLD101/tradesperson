@@ -527,4 +527,130 @@ describe.sequential('Procurement DB Tests', () => {
       }),
     ).rejects.toThrow(/cannot exceed/i);
   });
+
+  it('Scheduling: retrieves date-range jobs and enforces installer workload rules', async () => {
+    const createJob = (jobNumber: string, branchId = fixtures.branchA1.id) =>
+      prisma.job.create({
+        data: {
+          tenantId: fixtures.tenantA.id,
+          branchId,
+          customerId: branchId === fixtures.branchA2.id ? fixtures.customerA2.id : fixtures.customerA1.id,
+          siteId: branchId === fixtures.branchA2.id ? fixtures.siteA2.id : fixtures.siteA1.id,
+          jobNumber,
+          status: 'DRAFT',
+          title: `${jobNumber} scheduling test`,
+          totalValue: 1000,
+        },
+      });
+    const start = new Date('2026-08-03T09:00:00.000Z');
+    const end = new Date('2026-08-03T12:00:00.000Z');
+    const overlappingStart = new Date('2026-08-03T10:00:00.000Z');
+    const overlappingEnd = new Date('2026-08-03T11:00:00.000Z');
+    const laterStart = new Date('2026-08-03T13:00:00.000Z');
+    const laterEnd = new Date('2026-08-03T15:00:00.000Z');
+    const rangeEnd = new Date('2026-08-10T00:00:00.000Z');
+
+    const [firstJob, secondJob, thirdJob, branchTwoJob] = await Promise.all([
+      createJob('JOB-SCH-1'),
+      createJob('JOB-SCH-2'),
+      createJob('JOB-SCH-3'),
+      createJob('JOB-SCH-B2', fixtures.branchA2.id),
+    ]);
+
+    await jobs.scheduleJob(ownerSession, firstJob.id, {
+      scheduledStart: start,
+      scheduledEnd: end,
+      assignedInstallerId: fixtures.branchUserA1.user.id,
+      installationTeamName: 'Team Schedule A',
+    });
+
+    await expect(
+      jobs.scheduleJob(ownerSession, secondJob.id, {
+        scheduledStart: overlappingStart,
+        scheduledEnd: overlappingEnd,
+        assignedInstallerId: fixtures.branchUserA1.user.id,
+        installationTeamName: 'Team Schedule B',
+      }),
+    ).rejects.toThrow(/overlaps JOB-SCH-1/i);
+
+    await expect(
+      jobs.scheduleJob(ownerSession, secondJob.id, {
+        scheduledStart: laterStart,
+        scheduledEnd: laterEnd,
+        assignedInstallerId: fixtures.ownerB.user.id,
+      }),
+    ).rejects.toThrow(/active member of this tenant/i);
+
+    await jobs.scheduleJob(ownerSession, secondJob.id, {
+      scheduledStart: laterStart,
+      scheduledEnd: laterEnd,
+      assignedInstallerId: fixtures.branchUserA1.user.id,
+      installationTeamName: 'Team Schedule B',
+    });
+
+    await jobs.scheduleJob(ownerSession, thirdJob.id, {
+      scheduledStart: overlappingStart,
+      scheduledEnd: overlappingEnd,
+      assignedInstallerId: fixtures.staffA.user.id,
+      installationTeamName: 'Team Schedule C',
+    });
+
+    await expect(
+      jobs.scheduleJob(ownerSession, thirdJob.id, {
+        scheduledStart: overlappingStart,
+        scheduledEnd: overlappingEnd,
+        assignedInstallerId: fixtures.staffA.user.id,
+        installationTeamName: 'Team Schedule C',
+      }),
+    ).resolves.toMatchObject({ id: thirdJob.id, status: 'SCHEDULED' });
+
+    const schedule = await jobs.listSchedule(ownerSession, {
+      start,
+      end: rangeEnd,
+      branchId: fixtures.branchA1.id,
+      unscheduledLimit: 10,
+    });
+    expect(schedule.scheduledJobs.map((job: any) => job.jobNumber)).toEqual(
+      expect.arrayContaining(['JOB-SCH-1', 'JOB-SCH-2', 'JOB-SCH-3']),
+    );
+    expect(schedule.unscheduledJobs.map((job: any) => job.jobNumber)).not.toContain('JOB-SCH-B2');
+
+    await jobs.unscheduleJob(ownerSession, secondJob.id);
+    const unscheduled = await prisma.job.findUniqueOrThrow({ where: { id: secondJob.id } });
+    expect(unscheduled.scheduledStart).toBeNull();
+    expect(unscheduled.assignedInstallerId).toBeNull();
+    expect(unscheduled.status).toBe('DRAFT');
+
+    const branchRestrictedSession: SessionContext = {
+      ...ownerSession,
+      user: {
+        id: fixtures.branchUserA1.user.id,
+        email: fixtures.branchUserA1.user.email,
+        firstName: fixtures.branchUserA1.user.firstName,
+        lastName: fixtures.branchUserA1.user.lastName,
+        status: fixtures.branchUserA1.user.status,
+      },
+      activeBranchId: fixtures.branchA1.id,
+      memberships: [
+        {
+          id: fixtures.branchUserA1.id,
+          tenantId: fixtures.tenantA.id,
+          tenantName: fixtures.tenantA.name,
+          tenantSlug: fixtures.tenantA.slug,
+          status: 'ACTIVE',
+          isOwner: false,
+          roleKeys: ['BRANCH_MANAGER'],
+          permissions: [],
+          defaultBranchId: fixtures.branchA1.id,
+        },
+      ],
+    };
+    await expect(
+      jobs.scheduleJob(branchRestrictedSession, branchTwoJob.id, {
+        scheduledStart: start,
+        scheduledEnd: end,
+        assignedInstallerId: fixtures.branchUserA1.user.id,
+      }),
+    ).rejects.toThrow(/not found/i);
+  });
 });

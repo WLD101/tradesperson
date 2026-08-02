@@ -12,6 +12,8 @@ export type Job = {
   depositPaid: string;
   scheduledStart: string | null;
   scheduledEnd: string | null;
+  assignedInstallerId: string | null;
+  installationTeamName: string | null;
   completedAt: string | null;
   completionNotes: string | null;
   customerSignoffName: string | null;
@@ -22,6 +24,19 @@ export type Job = {
   site?: { id: string; label: string; addressLine1?: string | null; city?: string | null; postcode?: string | null };
   branch?: { id: string; name: string };
   quote?: { id: string; quoteNumber: string; status: string; grandTotal: string } | null;
+  assignedInstaller?: { id: string; firstName: string; lastName: string; email: string } | null;
+  profitability?: {
+    revenue: string;
+    invoicedTotal: string;
+    paidAmount: string;
+    balanceDue: string;
+    estimatedMaterialCost: string;
+    actualMaterialCost: string;
+    labourCost: string;
+    totalCost: string;
+    grossProfit: string;
+    grossMarginPercent: string;
+  };
   materialRequirements?: MaterialRequirement[];
   invoices?: Invoice[];
 };
@@ -97,6 +112,27 @@ export type Payment = {
   notes: string | null;
 };
 
+export type ScheduleInstaller = {
+  id: string;
+  membershipId: string;
+  name: string;
+  email: string;
+  status: string;
+  userStatus: string;
+  isOwner: boolean;
+  defaultBranch: { id: string; name: string; branchCode: string } | null;
+  roleKeys: string[];
+};
+
+export type ScheduleResponse = {
+  range: { start: string; end: string };
+  installers: ScheduleInstaller[];
+  scheduledJobs: Job[];
+  unscheduledJobs: Job[];
+  totalScheduled: number;
+  totalUnscheduled: number;
+};
+
 export async function getJobs(params?: Record<string, string | number | undefined>) {
   const query = new URLSearchParams();
   Object.entries(params ?? {}).forEach(([key, value]) => {
@@ -104,6 +140,22 @@ export async function getJobs(params?: Record<string, string | number | undefine
   });
   const qs = query.toString();
   return apiFetch<{ items: Job[]; total: number; page: number; pageSize: number; totalPages: number }>(`/api/v1/jobs${qs ? `?${qs}` : ""}`);
+}
+
+export async function getSchedule(params: {
+  start: string;
+  end: string;
+  branchId?: string;
+  installerId?: string;
+  status?: string;
+  search?: string;
+  unscheduledLimit?: number;
+}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== "") query.set(key, String(value));
+  });
+  return apiFetch<ScheduleResponse>(`/api/v1/jobs/schedule?${query.toString()}`);
 }
 
 export async function getJob(id: string) {
@@ -152,10 +204,27 @@ export async function returnJobStock(
   });
 }
 
-export async function scheduleJob(id: string, payload: { scheduledStart: string; scheduledEnd: string; accessNotes?: string; workNotes?: string }) {
+export async function scheduleJob(
+  id: string,
+  payload: {
+    scheduledStart: string;
+    scheduledEnd: string;
+    assignedInstallerId?: string;
+    installationTeamName?: string;
+    accessNotes?: string;
+    workNotes?: string;
+  },
+) {
   return apiFetch<Job>(`/api/v1/jobs/${id}/schedule`, {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export async function unscheduleJob(id: string) {
+  return apiFetch<Job>(`/api/v1/jobs/${id}/unschedule`, {
+    method: "POST",
+    body: JSON.stringify({}),
   });
 }
 

@@ -12,12 +12,12 @@ describe("ensureTestEnv", () => {
     delete process.env.DIRECT_URL;
     delete process.env.NODE_ENV;
 
-    const { ensureTestEnv } = await import("./test-env");
+    const { buildLocalTestDatabaseUrl, ensureTestEnv } = await import("./test-env");
     const env = ensureTestEnv();
 
     expect(process.env.NODE_ENV).toBe("test");
     expect(env.databaseUrl).toBe(
-      "postgresql://postgres:postgres@localhost:55432/tradesperson_erp_isolation_test",
+      buildLocalTestDatabaseUrl("tradesperson_erp_isolation_test"),
     );
     expect(env.directUrl).toBe(env.databaseUrl);
     expect(env.testDbName).toBe("tradesperson_erp_isolation_test");
@@ -38,8 +38,9 @@ describe("ensureTestEnv", () => {
   });
 
   test("rejects a non-test database url", async () => {
+    const { buildLocalTestDatabaseUrl } = await import("./test-env");
     process.env.DATABASE_URL =
-      "postgresql://postgres:postgres@localhost:55432/tradesperson_erp";
+      buildLocalTestDatabaseUrl("tradesperson_erp");
     process.env.DIRECT_URL = process.env.DATABASE_URL;
     delete process.env.NODE_ENV;
 
@@ -75,7 +76,8 @@ describe("ensureTestEnv", () => {
   });
 
   test("rejects a database url without a database name", async () => {
-    process.env.DATABASE_URL = "postgresql://postgres:postgres@localhost:55432/";
+    const { buildLocalTestDatabaseUrl } = await import("./test-env");
+    process.env.DATABASE_URL = buildLocalTestDatabaseUrl("");
     process.env.DIRECT_URL = process.env.DATABASE_URL;
     delete process.env.NODE_ENV;
 
@@ -87,8 +89,9 @@ describe("ensureTestEnv", () => {
   });
 
   test("rejects a database name that does not contain test", async () => {
+    const { buildLocalTestDatabaseUrl } = await import("./test-env");
     process.env.DATABASE_URL =
-      "postgresql://postgres:postgres@localhost:55432/tradesperson_erp_isolation";
+      buildLocalTestDatabaseUrl("tradesperson_erp_isolation");
     process.env.DIRECT_URL = process.env.DATABASE_URL;
     delete process.env.NODE_ENV;
 

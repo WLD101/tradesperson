@@ -1,4 +1,7 @@
-import { Button, Card, Input } from "@tradesperson/ui";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { CheckCircle2, UserPlus } from "lucide-react";
+import { AuthCard, IndustrialAuthShell, StatusRail } from "@/components/auth/industrial-auth-shell";
 
 type InvitationPageProps = {
   params: Promise<{ token: string }>;
@@ -7,7 +10,7 @@ type InvitationPageProps = {
 async function acceptInvitation(formData: FormData) {
   "use server";
 
-  await fetch(
+  const response = await fetch(
     `${process.env.API_URL ?? "http://localhost:4000"}/api/v1/invitations/accept`,
     {
       method: "POST",
@@ -20,6 +23,12 @@ async function acceptInvitation(formData: FormData) {
       }),
     },
   );
+
+  if (response.ok) {
+    redirect("/auth/success");
+  }
+
+  redirect("/auth/error");
 }
 
 export default async function InvitationPage({ params }: InvitationPageProps) {
@@ -33,33 +42,74 @@ export default async function InvitationPage({ params }: InvitationPageProps) {
     { valid: boolean; email?: string; tenantName?: string } | undefined;
 
   return (
-    <main className="flex min-h-screen items-center justify-center p-6">
-      <Card className="w-full max-w-lg space-y-5">
-        <div>
-          <h1 className="text-3xl font-semibold text-slate-950">
-            Accept invitation
-          </h1>
-          <p className="mt-2 text-sm text-slate-600">
-            {invitation?.valid
-              ? `Join ${invitation.tenantName} as ${invitation.email}.`
-              : "This invitation is invalid or expired."}
-          </p>
-        </div>
+    <IndustrialAuthShell headline="Accept your invite into a secure flooring operations workspace.">
+      <AuthCard
+        eyebrow="Invitation acceptance"
+        subtitle={
+          invitation?.valid
+            ? `Join ${invitation.tenantName} as ${invitation.email}.`
+            : "This invitation is invalid or expired."
+        }
+        title={invitation?.valid ? "Join workspace" : "Invitation unavailable"}
+      >
         {invitation?.valid ? (
           <form action={acceptInvitation} className="space-y-4">
-            <input type="hidden" name="token" value={token} />
-            <Input name="firstName" placeholder="First name" required />
-            <Input name="lastName" placeholder="Last name" required />
-            <Input
-              name="password"
-              placeholder="Create password"
-              required
-              type="password"
-            />
-            <Button type="submit">Accept invitation</Button>
+            <input name="token" type="hidden" value={token} />
+            <div className="rounded-3xl border border-emerald-200 bg-emerald-50 p-4">
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-emerald-700">
+                  <UserPlus className="h-6 w-6" />
+                </span>
+                <div>
+                  <p className="text-sm font-black text-slate-950">{invitation.tenantName}</p>
+                  <p className="text-xs font-bold text-slate-600">Role and permissions activate after password setup.</p>
+                </div>
+              </div>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AuthInput label="First Name" name="firstName" placeholder="Olivia" />
+              <AuthInput label="Last Name" name="lastName" placeholder="Owner" />
+            </div>
+            <AuthInput label="Create Password" name="password" type="password" />
+            <button className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-slate-950 px-5 text-sm font-black text-white shadow-stitch-overlay" type="submit">
+              <CheckCircle2 className="h-4 w-4" />
+              Accept invitation
+            </button>
           </form>
-        ) : null}
-      </Card>
-    </main>
+        ) : (
+          <div className="space-y-6">
+            <StatusRail items={["No workspace access was granted", "Ask the owner for a new invite", "Expired links remain blocked"]} />
+            <Link className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-slate-950 px-5 text-sm font-black text-white" href="/sign-in">
+              Back to Sign In
+            </Link>
+          </div>
+        )}
+      </AuthCard>
+    </IndustrialAuthShell>
+  );
+}
+
+function AuthInput({
+  label,
+  name,
+  placeholder,
+  type = "text",
+}: {
+  label: string;
+  name: string;
+  placeholder?: string;
+  type?: string;
+}) {
+  return (
+    <label className="space-y-2 text-sm font-bold text-slate-700">
+      {label}
+      <input
+        className="min-h-12 w-full rounded-2xl border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-950 transition focus:border-emerald-500 focus:shadow-[0_0_0_4px_rgba(16,185,129,0.16)] focus:outline-none"
+        name={name}
+        placeholder={placeholder}
+        required
+        type={type}
+      />
+    </label>
   );
 }

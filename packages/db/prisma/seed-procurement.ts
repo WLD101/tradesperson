@@ -275,9 +275,9 @@ export async function seedProcurement(
               {
                 tenantId: tenant.id,
                 productId: supplierProduct.productId,
-                productVariantId: supplierProduct.variantId,
+                productVariantId: supplierProduct.variantId ?? null,
                 supplierProductId: supplierProduct.id,
-                purchaseRequisitionLineId: reqOrdered.lines[0].id,
+                purchaseRequisitionLineId: reqOrdered.lines[0]?.id ?? null,
                 quantity: "50.00",
                 unit: unitName,
                 description: desc,
@@ -294,6 +294,11 @@ export async function seedProcurement(
     include: { versions: { include: { lines: true } } }
   });
 
+  const issuedPOWithVersions = await prisma.purchaseOrder.findUniqueOrThrow({
+    where: { id: issuedPO.id },
+    include: { versions: true }
+  });
+
   // Supplier Acknowledgement
   await prisma.supplierAcknowledgement.deleteMany({
     where: {
@@ -305,8 +310,8 @@ export async function seedProcurement(
   await prisma.supplierAcknowledgement.create({
     data: {
       tenantId: tenant.id,
-      purchaseOrderId: issuedPO.id,
-      purchaseOrderVersionId: issuedPO.versions[0].id,
+      purchaseOrderId: issuedPOWithVersions.id,
+      purchaseOrderVersionId: issuedPOWithVersions.versions[0]?.id ?? "",
       acknowledgedAt: new Date(),
       supplierReference: "ACK-999123",
       createdById: owner.id,
@@ -317,15 +322,15 @@ export async function seedProcurement(
   await prisma.purchaseOrderDeliveryPlan.deleteMany({
     where: {
       tenantId: tenant.id,
-      purchaseOrderId: issuedPO.id,
+      purchaseOrderId: issuedPOWithVersions.id,
     }
   });
 
   await prisma.purchaseOrderDeliveryPlan.create({
     data: {
       tenantId: tenant.id,
-      purchaseOrderId: issuedPO.id,
-      purchaseOrderVersionId: issuedPO.versions[0].id,
+      purchaseOrderId: issuedPOWithVersions.id,
+      purchaseOrderVersionId: issuedPOWithVersions.versions[0]?.id ?? "",
       expectedDate: new Date(Date.now() + 86400000 * 5),
       createdById: owner.id,
     }

@@ -382,6 +382,7 @@ enum InvoiceStatus {
   ISSUED
   PARTIALLY_PAID
   PAID
+  OVERDUE
   CANCELLED
 }
 
@@ -414,6 +415,8 @@ model User {
   roomsUpdated      SurveyRoom[]           @relation("SurveyRoomUpdatedBy")
   componentsCreated MeasurementComponent[] @relation("MeasurementComponentCreatedBy")
   componentsUpdated MeasurementComponent[] @relation("MeasurementComponentUpdatedBy")
+  fileAttachments   FileAttachment[]
+  assignedJobs      Job[]                  @relation("JobAssignedInstaller")
 }
 
 model AuthSession {
@@ -437,34 +440,42 @@ model AuthSession {
 }
 
 model Tenant {
-  id                         String                        @id @default(uuid()) @db.Uuid
-  name                       String
-  slug                       String                        @unique
-  legalName                  String?
-  tradingName                String?
-  status                     TenantStatus                  @default(ACTIVE)
-  companyNumber              String?
-  vatRegistrationNo          String?
-  businessEmail              String?
-  businessPhone              String?
-  website                    String?
-  addressLine1               String?
-  addressLine2               String?
-  city                       String?
-  postcode                   String?
-  countryCode                String                        @default("GB")
-  currencyCode               String                        @default("GBP")
-  timeZone                   String                        @default("Europe/London")
-  createdAt                  DateTime                      @default(now())
-  updatedAt                  DateTime                      @updatedAt
-  memberships                TenantMembership[]
-  sessions                   AuthSession[]                 @relation("ActiveSessionTenant")
-  branches                   Branch[]
-  settings                   TenantSetting?
-  numberSequences            NumberSequence[]
-  invitations                Invitation[]
-  subscriptions              TenantSubscription[]
-  featureOverrides           TenantFeatureOverride[]
+  id                String                  @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String                  @unique
+  activeIndustries  IndustryType[] @default([FLOORING])
+  stripeCustomerId  String?
+  subscriptionTier  SubscriptionTier        @default(FREE)
+  legalName         String?
+  tradingName       String?
+  status            TenantStatus            @default(ACTIVE)
+  companyNumber     String?
+  vatRegistrationNo String?
+  businessEmail     String?
+  businessPhone     String?
+  website           String?
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  postcode          String?
+  countryCode       String                  @default("GB")
+  currencyCode      String                  @default("GBP")
+  timeZone          String                  @default("Europe/London")
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  memberships       TenantMembership[]
+  sessions          AuthSession[]           @relation("ActiveSessionTenant")
+  branches          Branch[]
+  settings          TenantSetting?
+  numberSequences   NumberSequence[]
+  invitations       Invitation[]
+  subscriptions     TenantSubscription[]
+  featureOverrides  TenantFeatureOverride[]
+  notifications     NotificationLog[]
+
+  // Billing & SaaS
+  stripeSubscription StripeSubscription?
+
   auditLogs                  AuditLog[]
   leads                      Lead[]
   customers                  Customer[]
@@ -517,6 +528,9 @@ model Tenant {
   stockReservations          StockReservation[]
   invoices                   Invoice[]
   payments                   Payment[]
+  fileAttachments            FileAttachment[]
+  inventoryRolls             InventoryRoll[]
+  showroomSamples            ShowroomSample[]
 }
 
 model TenantMembership {
@@ -1474,48 +1488,53 @@ model PurchaseRequisition {
 }
 
 model Estimate {
-  id                 String            @id @default(uuid()) @db.Uuid
-  tenantId           String            @db.Uuid
-  branchId           String?           @db.Uuid
-  customerId         String            @db.Uuid
-  siteId             String            @db.Uuid
-  surveyId           String?           @db.Uuid
-  estimateNumber     String
-  status             EstimateStatus    @default(DRAFT)
-  title              String?
-  currency           String            @default("GBP")
-  subtotal           Decimal           @default(0) @db.Decimal(14, 4)
-  materialCost       Decimal           @default(0) @db.Decimal(14, 4)
-  labourCost         Decimal           @default(0) @db.Decimal(14, 4)
-  accessoryCost      Decimal           @default(0) @db.Decimal(14, 4)
-  supplierCost       Decimal           @default(0) @db.Decimal(14, 4)
-  marginAmount       Decimal           @default(0) @db.Decimal(14, 4)
-  discountAmount     Decimal           @default(0) @db.Decimal(14, 4)
-  vatRate            Decimal           @default(0.2) @db.Decimal(8, 4)
-  vatAmount          Decimal           @default(0) @db.Decimal(14, 4)
-  grandTotal         Decimal           @default(0) @db.Decimal(14, 4)
-  grossProfit        Decimal           @default(0) @db.Decimal(14, 4)
-  grossMarginPercent Decimal           @default(0) @db.Decimal(8, 4)
-  internalNotes      String?
-  customerNotes      String?
-  createdById        String?           @db.Uuid
-  updatedById        String?           @db.Uuid
-  approvedById       String?           @db.Uuid
-  rejectedById       String?           @db.Uuid
-  approvedAt         DateTime?
-  rejectedAt         DateTime?
-  cancelledAt        DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  branch             Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  customer           Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  site               Site              @relation(fields: [siteId], references: [id], onDelete: Restrict)
-  survey             Survey?           @relation(fields: [surveyId], references: [id], onDelete: SetNull)
-  rooms              EstimateRoom[]
-  lines              EstimateLine[]
-  versions           EstimateVersion[]
-  quotes             Quote[]
+  id                   String            @id @default(uuid()) @db.Uuid
+  tenantId             String            @db.Uuid
+  branchId             String?           @db.Uuid
+  customerId           String            @db.Uuid
+  industryData         Json?
+  siteId               String            @db.Uuid
+  surveyId             String?           @db.Uuid
+  estimateNumber       String
+  status               EstimateStatus    @default(DRAFT)
+  title                String?
+  portalToken          String            @unique @default(uuid())
+  portalTokenExpiresAt DateTime?
+  signatureData        String?
+  signedAt             DateTime?
+  currency             String            @default("GBP")
+  subtotal             Decimal           @default(0) @db.Decimal(14, 4)
+  materialCost         Decimal           @default(0) @db.Decimal(14, 4)
+  labourCost           Decimal           @default(0) @db.Decimal(14, 4)
+  accessoryCost        Decimal           @default(0) @db.Decimal(14, 4)
+  supplierCost         Decimal           @default(0) @db.Decimal(14, 4)
+  marginAmount         Decimal           @default(0) @db.Decimal(14, 4)
+  discountAmount       Decimal           @default(0) @db.Decimal(14, 4)
+  vatRate              Decimal           @default(0.2) @db.Decimal(8, 4)
+  vatAmount            Decimal           @default(0) @db.Decimal(14, 4)
+  grandTotal           Decimal           @default(0) @db.Decimal(14, 4)
+  grossProfit          Decimal           @default(0) @db.Decimal(14, 4)
+  grossMarginPercent   Decimal           @default(0) @db.Decimal(8, 4)
+  internalNotes        String?
+  customerNotes        String?
+  createdById          String?           @db.Uuid
+  updatedById          String?           @db.Uuid
+  approvedById         String?           @db.Uuid
+  rejectedById         String?           @db.Uuid
+  approvedAt           DateTime?
+  rejectedAt           DateTime?
+  cancelledAt          DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  tenant               Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch               Branch?           @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer             Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  site                 Site              @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  survey               Survey?           @relation(fields: [surveyId], references: [id], onDelete: SetNull)
+  rooms                EstimateRoom[]
+  lines                EstimateLine[]
+  versions             EstimateVersion[]
+  quotes               Quote[]
 
   @@unique([tenantId, estimateNumber])
   @@index([tenantId, branchId, status, createdAt])
@@ -1732,6 +1751,7 @@ model Job {
   tenantId             String                @db.Uuid
   branchId             String?               @db.Uuid
   customerId           String                @db.Uuid
+  industryData         Json?
   siteId               String                @db.Uuid
   quoteId              String?               @db.Uuid
   jobNumber            String
@@ -1743,6 +1763,8 @@ model Job {
   depositPaid          Decimal               @default(0) @db.Decimal(14, 4)
   scheduledStart       DateTime?
   scheduledEnd         DateTime?
+  assignedInstallerId  String?               @db.Uuid
+  installationTeamName String?
   completedAt          DateTime?
   completedById        String?               @db.Uuid
   completionNotes      String?
@@ -1758,6 +1780,7 @@ model Job {
   customer             Customer              @relation(fields: [customerId], references: [id], onDelete: Restrict)
   site                 Site                  @relation(fields: [siteId], references: [id], onDelete: Restrict)
   quote                Quote?                @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  assignedInstaller    User?                 @relation("JobAssignedInstaller", fields: [assignedInstallerId], references: [id], onDelete: SetNull)
   materialRequirements MaterialRequirement[]
   stockReservations    StockReservation[]
   inventoryMovements   InventoryMovement[]
@@ -1765,6 +1788,7 @@ model Job {
 
   @@unique([tenantId, jobNumber])
   @@index([tenantId, branchId, status, createdAt])
+  @@index([tenantId, branchId, assignedInstallerId, scheduledStart, scheduledEnd])
   @@index([tenantId, customerId, createdAt])
   @@index([tenantId, siteId, createdAt])
   @@index([quoteId])
@@ -1819,22 +1843,22 @@ model MaterialRequirement {
 }
 
 model InventoryWarehouse {
-  id                String             @id @default(uuid()) @db.Uuid
-  tenantId          String             @db.Uuid
-  branchId          String?            @db.Uuid
-  code              String
-  name              String
-  isDefault         Boolean            @default(false)
-  addressLine1      String?
-  city              String?
-  postcode          String?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  branch            Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  stockBalances     StockBalance[]
-  stockReservations StockReservation[]
-  goodsReceipts     GoodsReceipt[]
+  id                 String              @id @default(uuid()) @db.Uuid
+  tenantId           String              @db.Uuid
+  branchId           String?             @db.Uuid
+  code               String
+  name               String
+  isDefault          Boolean             @default(false)
+  addressLine1       String?
+  city               String?
+  postcode           String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch             Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  stockBalances      StockBalance[]
+  stockReservations  StockReservation[]
+  goodsReceipts      GoodsReceipt[]
   inventoryMovements InventoryMovement[]
 
   @@unique([tenantId, code])
@@ -1842,33 +1866,38 @@ model InventoryWarehouse {
 }
 
 model Invoice {
-  id            String        @id @default(uuid()) @db.Uuid
-  tenantId      String        @db.Uuid
-  branchId      String?       @db.Uuid
-  jobId         String        @db.Uuid
-  customerId    String        @db.Uuid
-  siteId        String        @db.Uuid
-  invoiceNumber String
-  status        InvoiceStatus @default(DRAFT)
-  currency      String        @default("GBP")
-  subtotal      Decimal       @default(0) @db.Decimal(14, 4)
-  vatAmount     Decimal       @default(0) @db.Decimal(14, 4)
-  total         Decimal       @default(0) @db.Decimal(14, 4)
-  paidAmount    Decimal       @default(0) @db.Decimal(14, 4)
-  balanceDue    Decimal       @default(0) @db.Decimal(14, 4)
-  issuedAt      DateTime?
-  dueDate       DateTime?
-  notes         String?
-  createdById   String?       @db.Uuid
-  updatedById   String?       @db.Uuid
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  branch        Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  job           Job           @relation(fields: [jobId], references: [id], onDelete: Restrict)
-  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  site          Site          @relation(fields: [siteId], references: [id], onDelete: Restrict)
-  payments      Payment[]
+  id                   String        @id @default(uuid()) @db.Uuid
+  tenantId             String        @db.Uuid
+  branchId             String?       @db.Uuid
+  jobId                String        @db.Uuid
+  customerId           String        @db.Uuid
+  siteId               String        @db.Uuid
+  invoiceNumber        String
+  status               InvoiceStatus @default(DRAFT)
+  portalToken          String        @unique @default(uuid())
+  portalTokenExpiresAt DateTime?
+  currency             String        @default("GBP")
+  subtotal             Decimal       @default(0) @db.Decimal(14, 4)
+  vatAmount            Decimal       @default(0) @db.Decimal(14, 4)
+  total                Decimal       @default(0) @db.Decimal(14, 4)
+  paidAmount           Decimal       @default(0) @db.Decimal(14, 4)
+  balanceDue           Decimal       @default(0) @db.Decimal(14, 4)
+  issuedAt             DateTime?
+  dueDate              DateTime?
+
+  stripePaymentIntentId   String?
+  stripeCheckoutSessionId String?
+  notes                   String?
+  createdById             String?   @db.Uuid
+  updatedById             String?   @db.Uuid
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  tenant                  Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch                  Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  job                     Job       @relation(fields: [jobId], references: [id], onDelete: Restrict)
+  customer                Customer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  site                    Site      @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  payments                Payment[]
 
   @@unique([tenantId, invoiceNumber])
   @@unique([tenantId, jobId])
@@ -1903,25 +1932,25 @@ model Payment {
 }
 
 model StockBalance {
-  id                String             @id @default(uuid()) @db.Uuid
-  tenantId          String             @db.Uuid
-  branchId          String?            @db.Uuid
-  warehouseId       String             @db.Uuid
-  productId         String             @db.Uuid
-  productVariantId  String?            @db.Uuid
-  supplierProductId String?            @db.Uuid
+  id                String              @id @default(uuid()) @db.Uuid
+  tenantId          String              @db.Uuid
+  branchId          String?             @db.Uuid
+  warehouseId       String              @db.Uuid
+  productId         String              @db.Uuid
+  productVariantId  String?             @db.Uuid
+  supplierProductId String?             @db.Uuid
   unit              String
-  onHandQuantity    Decimal            @default(0) @db.Decimal(14, 4)
-  reservedQuantity  Decimal            @default(0) @db.Decimal(14, 4)
-  issuedQuantity    Decimal            @default(0) @db.Decimal(14, 4)
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  branch            Branch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  warehouse         InventoryWarehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  product           Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
-  productVariant    ProductVariant?    @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
-  supplierProduct   SupplierProduct?   @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  onHandQuantity    Decimal             @default(0) @db.Decimal(14, 4)
+  reservedQuantity  Decimal             @default(0) @db.Decimal(14, 4)
+  issuedQuantity    Decimal             @default(0) @db.Decimal(14, 4)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch            Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  warehouse         InventoryWarehouse  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  product           Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productVariant    ProductVariant?     @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  supplierProduct   SupplierProduct?    @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
   reservations      StockReservation[]
   movements         InventoryMovement[]
 
@@ -2124,29 +2153,29 @@ model PurchaseOrderLine {
 }
 
 model GoodsReceipt {
-  id                     String                 @id @default(uuid()) @db.Uuid
-  tenantId               String                 @db.Uuid
-  branchId               String                 @db.Uuid
-  purchaseOrderId        String                 @db.Uuid
-  purchaseOrderVersionId String?                @db.Uuid
-  warehouseId            String                 @db.Uuid
+  id                     String                @id @default(uuid()) @db.Uuid
+  tenantId               String                @db.Uuid
+  branchId               String                @db.Uuid
+  purchaseOrderId        String                @db.Uuid
+  purchaseOrderVersionId String?               @db.Uuid
+  warehouseId            String                @db.Uuid
   receiptNumber          String
-  status                 GoodsReceiptStatus     @default(DRAFT)
+  status                 GoodsReceiptStatus    @default(DRAFT)
   supplierReference      String?
   idempotencyKey         String?
   receivedAt             DateTime?
   postedAt               DateTime?
-  postedById             String?                @db.Uuid
+  postedById             String?               @db.Uuid
   notes                  String?
-  createdById            String?                @db.Uuid
-  updatedById            String?                @db.Uuid
-  createdAt              DateTime               @default(now())
-  updatedAt              DateTime               @updatedAt
-  tenant                 Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  branch                 Branch                 @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  purchaseOrder          PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  purchaseOrderVersion   PurchaseOrderVersion?  @relation(fields: [purchaseOrderVersionId], references: [id], onDelete: SetNull)
-  warehouse              InventoryWarehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  createdById            String?               @db.Uuid
+  updatedById            String?               @db.Uuid
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  tenant                 Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch                 Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  purchaseOrder          PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  purchaseOrderVersion   PurchaseOrderVersion? @relation(fields: [purchaseOrderVersionId], references: [id], onDelete: SetNull)
+  warehouse              InventoryWarehouse    @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   lines                  GoodsReceiptLine[]
   inventoryMovements     InventoryMovement[]
 
@@ -2158,30 +2187,30 @@ model GoodsReceipt {
 }
 
 model GoodsReceiptLine {
-  id                  String               @id @default(uuid()) @db.Uuid
-  tenantId            String               @db.Uuid
-  branchId            String               @db.Uuid
-  goodsReceiptId      String               @db.Uuid
-  purchaseOrderLineId String               @db.Uuid
-  productId           String               @db.Uuid
-  productVariantId    String?              @db.Uuid
-  supplierProductId   String?              @db.Uuid
-  receivedQuantity    Decimal              @default(0) @db.Decimal(14, 4)
-  usableQuantity      Decimal              @default(0) @db.Decimal(14, 4)
-  damagedQuantity     Decimal              @default(0) @db.Decimal(14, 4)
-  rejectedQuantity    Decimal              @default(0) @db.Decimal(14, 4)
+  id                  String              @id @default(uuid()) @db.Uuid
+  tenantId            String              @db.Uuid
+  branchId            String              @db.Uuid
+  goodsReceiptId      String              @db.Uuid
+  purchaseOrderLineId String              @db.Uuid
+  productId           String              @db.Uuid
+  productVariantId    String?             @db.Uuid
+  supplierProductId   String?             @db.Uuid
+  receivedQuantity    Decimal             @default(0) @db.Decimal(14, 4)
+  usableQuantity      Decimal             @default(0) @db.Decimal(14, 4)
+  damagedQuantity     Decimal             @default(0) @db.Decimal(14, 4)
+  rejectedQuantity    Decimal             @default(0) @db.Decimal(14, 4)
   unit                String
-  unitCost            Decimal              @default(0) @db.Decimal(14, 4)
+  unitCost            Decimal             @default(0) @db.Decimal(14, 4)
   notes               String?
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
-  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  branch              Branch               @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  goodsReceipt        GoodsReceipt         @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
-  purchaseOrderLine   PurchaseOrderLine    @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
-  product             Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
-  productVariant      ProductVariant?      @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
-  supplierProduct     SupplierProduct?     @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branch              Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  goodsReceipt        GoodsReceipt        @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderLine   PurchaseOrderLine   @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  product             Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productVariant      ProductVariant?     @relation(fields: [productVariantId], references: [id], onDelete: SetNull)
+  supplierProduct     SupplierProduct?    @relation(fields: [supplierProductId], references: [id], onDelete: SetNull)
   inventoryMovements  InventoryMovement[]
 
   @@unique([tenantId, goodsReceiptId, purchaseOrderLineId])
@@ -2286,6 +2315,7 @@ model Product {
   brandId                     String?                   @db.Uuid
   collectionId                String?                   @db.Uuid
   primaryUnitId               String                    @db.Uuid
+  industryData                Json?
   name                        String
   slug                        String
   sku                         String
@@ -2482,4 +2512,173 @@ model ProductImage {
 
   @@index([tenantId, productId, sortOrder])
   @@index([tenantId, variantId])
+}
+
+enum FileStatus {
+  PENDING
+  UPLOADED
+  FAILED
+}
+
+model FileAttachment {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  // Polymorphic association (e.g., entityType: 'JOB', 'CUSTOMER', 'QUOTE')
+  entityType String
+  entityId   String @db.Uuid
+
+  storageKey  String @unique
+  fileName    String
+  contentType String
+  sizeBytes   Int
+
+  status FileStatus @default(PENDING)
+
+  createdBy String @db.Uuid
+  user      User   @relation(fields: [createdBy], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, id])
+}
+
+enum IndustryType {
+  FLOORING
+  HVAC
+  PLUMBING
+  ELECTRICAL
+  ROOFING
+  LANDSCAPING
+  GENERAL_CONTRACTING
+}
+
+enum FlooringType {
+  CARPET_ROLL
+  SHEET_VINYL
+  LVT_PLANK
+  HARDWOOD
+  TILE
+}
+
+enum SampleStatus {
+  IN_SHOWROOM
+  CHECKED_OUT
+  OVERDUE
+  LOST
+}
+
+model InventoryRoll {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  productId       String @db.Uuid
+  dyeLotNumber    String
+  rollNumber      String
+  widthInInches   Int // e.g., 144 for 12ft roll
+  initialLengthFt Float
+  currentLengthFt Float // Remaining usable length
+
+  status      String  @default("ACTIVE") // ACTIVE, EXHAUSTED, REMNANT
+  locationBin String? // Warehouse rack location e.g., "RACK-B4"
+
+  cuts RollCut[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, productId])
+  @@index([tenantId, dyeLotNumber])
+}
+
+model RollCut {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+
+  rollId String        @db.Uuid
+  roll   InventoryRoll @relation(fields: [rollId], references: [id])
+
+  jobId         String  @db.Uuid
+  cutLengthFt   Float
+  wasteLengthFt Float   @default(0)
+  cutByUserId   String  @db.Uuid
+  notes         String?
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, rollId])
+}
+
+model ShowroomSample {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  sampleCode   String // Physical barcode/qr tag on board
+  productName  String
+  manufacturer String
+  status       SampleStatus @default(IN_SHOWROOM)
+
+  // Checkout Details
+  checkedOutToId String?   @db.Uuid // Customer ID
+  checkedOutAt   DateTime?
+  expectedReturn DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, sampleCode])
+}
+
+enum SubscriptionTier {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model StripeSubscription {
+  id                   String    @id @default(uuid()) @db.Uuid
+  tenantId             String    @unique @db.Uuid
+  stripeSubscriptionId String    @unique
+  status               String
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean   @default(false)
+  canceledAt           DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model NotificationLog {
+  id           String              @id @default(uuid()) @db.Uuid
+  tenantId     String              @db.Uuid
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  recipient    String
+  channel      NotificationChannel
+  template     String
+  status       NotificationStatus  @default(PENDING)
+  errorMessage String?
+  createdAt    DateTime            @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+  @@map("notification_logs")
 }

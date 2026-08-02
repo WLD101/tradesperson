@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { access, readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import net from "node:net";
@@ -15,6 +15,17 @@ const prismaClientDir = path.resolve(
   prismaClientPackageDir,
   "../.prisma/client",
 );
+const pnpmCjs =
+  process.platform === "win32" && process.env.APPDATA
+    ? path.join(process.env.APPDATA, "npm", "node_modules", "pnpm", "bin", "pnpm.cjs")
+    : null;
+
+function buildLocalTestDatabaseUrl(databaseName) {
+  const url = new URL(`postgresql://localhost:55432/${databaseName}`);
+  url.username = "postgres";
+  url.password = "postgres";
+  return url.toString();
+}
 
 function getAvailablePort() {
   return new Promise((resolve, reject) => {
@@ -54,6 +65,50 @@ function waitForHealth(url, maxRetries = 120, intervalMs = 500) {
   });
 }
 
+function killProcessTree(child, signal = "SIGTERM") {
+  if (!child?.pid) return;
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+      stdio: "ignore",
+    });
+    return;
+  }
+  child.kill(signal);
+}
+
+function waitForCloseWithTimeout(child, label, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      killProcessTree(child, "SIGKILL");
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      resolve(code);
+    });
+  });
+}
+
+function waitForClose(child) {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    child.once("close", resolve);
+  });
+}
+
+function spawnPnpm(args, options = {}) {
+  const command = pnpmCjs ?? "pnpm";
+  const commandArgs = pnpmCjs ? [pnpmCjs, ...args] : args;
+  return spawn(pnpmCjs ? process.execPath : command, commandArgs, {
+    ...options,
+    shell: false,
+  });
+}
+
 async function prismaClientIsReady() {
   try {
     await access(path.join(prismaClientDir, "index.js"));
@@ -86,7 +141,7 @@ async function main() {
     process.env.NODE_ENV = "test";
   }
 
-  const databaseUrl = process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:55432/tradesperson_erp_isolation_test";
+  const databaseUrl = process.env.DATABASE_URL || buildLocalTestDatabaseUrl("tradesperson_erp_isolation_test");
   
   if (!databaseUrl.includes("_test")) {
     console.error("Refusing to run against non-test database URL:", databaseUrl);
@@ -113,6 +168,7 @@ async function main() {
   const port = await getAvailablePort();
   const apiHost = "127.0.0.1";
   const apiUrl = `http://${apiHost}:${port}`;
+  const suiteTimeoutMs = Number(process.env.ISOLATION_TIMEOUT_MS || 900000);
   
   process.env.PORT = port.toString();
   process.env.API_URL = apiUrl;
@@ -122,15 +178,30 @@ async function main() {
   console.log(`[runner] Using test port ${port}`);
 
   let apiProcess;
+  let terminatingApi = false;
   try {
     console.log(`[runner] Resetting test database using real migrations...`);
-    const dbReset = spawn("pnpm", ["--filter", "@tradesperson/db", "exec", "prisma", "migrate", "reset", "--force", "--skip-generate"], { stdio: "inherit", shell: true, env: apiEnv });
-    await new Promise((res, rej) => {
-      dbReset.on("close", code => {
-        if (code === 0) res();
-        else rej(new Error(`Database migration failed with code ${code}`));
-      });
-    });
+    const dbReset = spawnPnpm(
+      [
+        "--filter",
+        "@tradesperson/db",
+        "exec",
+        "prisma",
+        "migrate",
+        "reset",
+        "--force",
+        "--skip-generate",
+      ],
+      { stdio: "inherit", env: apiEnv },
+    );
+    const dbResetCode = await waitForCloseWithTimeout(
+      dbReset,
+      "Database migration reset",
+      180000,
+    );
+    if (dbResetCode !== 0) {
+      throw new Error(`Database migration failed with code ${dbResetCode}`);
+    }
 
     await removeStalePrismaTempFiles();
     if (await prismaClientIsReady()) {
@@ -140,10 +211,15 @@ async function main() {
       let generated = false;
       let generateRetries = 0;
       while (!generated && generateRetries < 5) {
-        const dbGen = spawn("pnpm", ["--filter", "@tradesperson/db", "exec", "prisma", "generate"], { stdio: "inherit", shell: true, env: apiEnv });
-        const code = await new Promise((res) => {
-          dbGen.on("close", res);
-        });
+        const dbGen = spawnPnpm(
+          ["--filter", "@tradesperson/db", "exec", "prisma", "generate"],
+          { stdio: "inherit", env: apiEnv },
+        );
+        const code = await waitForCloseWithTimeout(
+          dbGen,
+          "Prisma generate",
+          120000,
+        );
         if (code === 0) {
           generated = true;
         } else {
@@ -168,6 +244,7 @@ async function main() {
       process.exit(1);
     });
     apiProcess.on("exit", (code, signal) => {
+      if (terminatingApi) return;
       if (code !== null && code !== 0) {
         console.error(`[runner] API process exited early with code ${code}`);
       } else if (signal) {
@@ -179,15 +256,16 @@ async function main() {
     await waitForHealth(`${apiUrl}/api/v1/health`);
 
     console.log(`[runner] API is healthy. Starting isolation suite...`);
-    const runner = spawn("pnpm", ["exec", "tsx", "test/tenant-isolation.runner.ts", "--no-recreate"], {
+    const runner = spawnPnpm(["exec", "tsx", "test/tenant-isolation.runner.ts", "--no-recreate"], {
       stdio: "inherit",
       env: apiEnv,
-      shell: true,
     });
 
-    const code = await new Promise((resolve) => {
-      runner.on("close", resolve);
-    });
+    const code = await waitForCloseWithTimeout(
+      runner,
+      "Tenant isolation suite",
+      suiteTimeoutMs,
+    );
 
     if (code !== 0) {
       console.error(`[runner] Suite failed with code ${code}`);
@@ -202,19 +280,16 @@ async function main() {
   } finally {
     if (apiProcess) {
       console.log(`[runner] Terminating API process...`);
-      apiProcess.kill("SIGTERM");
+      terminatingApi = true;
+      killProcessTree(apiProcess, "SIGTERM");
       
       const timeout = setTimeout(() => {
         console.log(`[runner] Force killing API process...`);
-        apiProcess.kill("SIGKILL");
+        killProcessTree(apiProcess, "SIGKILL");
       }, 5000);
 
-      await new Promise((resolve) => {
-        apiProcess.on("close", () => {
-          clearTimeout(timeout);
-          resolve();
-        });
-      });
+      await waitForClose(apiProcess);
+      clearTimeout(timeout);
       console.log(`[runner] API process terminated`);
     }
   }

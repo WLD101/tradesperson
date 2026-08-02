@@ -11,7 +11,7 @@ import { loadEnv } from "../../../packages/config/src";
 
 async function bootstrap() {
   const env = loadEnv();
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
 
   app.enableCors({
     origin: env.WEB_URL,

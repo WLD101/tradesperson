@@ -1,7 +1,16 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import {
+  Banknote,
+  Boxes,
+  CalendarDays,
+  CheckCircle2,
+  MapPin,
+  UserRound,
+} from "lucide-react";
 import { Breadcrumbs, DateDisplay, Money, PageHeader, StatusBadge, SummaryStrip } from "@/components/shared";
-import { getSession } from "@/lib/api";
+import { apiFetch, getSession } from "@/lib/api";
 import { completeJob, createJobInvoice, createJobMaterialRequisition, generateJobMaterialRequirements, getJob, getJobPermissions, issueJobStock, recordInvoicePayment, reserveJobStock, returnJobStock, scheduleJob } from "@/lib/jobs";
 
 function statusColor(status: string) {
@@ -16,6 +25,7 @@ async function generateRequirementsAction(formData: FormData) {
   const jobId = String(formData.get("jobId") ?? "");
   if (!jobId) return;
   await generateJobMaterialRequirements(jobId);
+  revalidatePath(`/app/jobs/${jobId}`);
 }
 
 async function createRequisitionAction(formData: FormData) {
@@ -23,6 +33,7 @@ async function createRequisitionAction(formData: FormData) {
   const jobId = String(formData.get("jobId") ?? "");
   if (!jobId) return;
   await createJobMaterialRequisition(jobId);
+  revalidatePath(`/app/jobs/${jobId}`);
 }
 
 async function reserveStockAction(formData: FormData) {
@@ -30,6 +41,7 @@ async function reserveStockAction(formData: FormData) {
   const jobId = String(formData.get("jobId") ?? "");
   if (!jobId) return;
   await reserveJobStock(jobId);
+  revalidatePath(`/app/jobs/${jobId}`);
 }
 
 async function issueStockAction(formData: FormData) {
@@ -37,6 +49,7 @@ async function issueStockAction(formData: FormData) {
   const jobId = String(formData.get("jobId") ?? "");
   if (!jobId) return;
   await issueJobStock(jobId);
+  revalidatePath(`/app/jobs/${jobId}`);
 }
 
 async function returnStockAction(formData: FormData) {
@@ -54,6 +67,7 @@ async function returnStockAction(formData: FormData) {
     notes: String(formData.get("notes") ?? ""),
     lines: [{ stockReservationId, usableQuantity, damagedQuantity }],
   });
+  revalidatePath(`/app/jobs/${jobId}`);
 }
 
 async function scheduleJobAction(formData: FormData) {
@@ -65,9 +79,12 @@ async function scheduleJobAction(formData: FormData) {
   await scheduleJob(jobId, {
     scheduledStart,
     scheduledEnd,
+    assignedInstallerId: String(formData.get("assignedInstallerId") ?? ""),
+    installationTeamName: String(formData.get("installationTeamName") ?? ""),
     accessNotes: String(formData.get("accessNotes") ?? ""),
     workNotes: String(formData.get("workNotes") ?? ""),
   });
+  revalidatePath(`/app/jobs/${jobId}`);
 }
 
 async function completeJobAction(formData: FormData) {
@@ -78,6 +95,7 @@ async function completeJobAction(formData: FormData) {
     completionNotes: String(formData.get("completionNotes") ?? ""),
     customerSignoffName: String(formData.get("customerSignoffName") ?? ""),
   });
+  revalidatePath(`/app/jobs/${jobId}`);
 }
 
 async function createInvoiceAction(formData: FormData) {
@@ -88,10 +106,12 @@ async function createInvoiceAction(formData: FormData) {
     dueDate: String(formData.get("dueDate") ?? ""),
     notes: String(formData.get("notes") ?? ""),
   });
+  revalidatePath(`/app/jobs/${jobId}`);
 }
 
 async function recordPaymentAction(formData: FormData) {
   "use server";
+  const jobId = String(formData.get("jobId") ?? "");
   const invoiceId = String(formData.get("invoiceId") ?? "");
   const amount = Number(formData.get("amount") ?? 0);
   if (!invoiceId || amount <= 0) return;
@@ -103,6 +123,7 @@ async function recordPaymentAction(formData: FormData) {
     paidAt: String(formData.get("paidAt") ?? ""),
     notes: String(formData.get("notes") ?? ""),
   });
+  if (jobId) revalidatePath(`/app/jobs/${jobId}`);
 }
 
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -114,8 +135,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   let job;
   try {
     job = await getJob(id);
-  } catch (err: any) {
-    if (err?.message?.includes("404") || err?.message?.includes("not found")) notFound();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "";
+    if (message.includes("404") || message.includes("not found")) notFound();
     throw err;
   }
   const depositComplete = Number(job.depositRequired) <= Number(job.depositPaid);
@@ -139,11 +161,50 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
   const hasIssuedStockToReturn = materialRequirements.some((requirement) =>
     (requirement.stockReservations ?? []).some((reservation) => Number(reservation.issuedQuantity) > 0),
   );
+  const members = await apiFetch<
+    Array<{
+      id: string;
+      status: string;
+      user: { id: string; firstName: string; lastName: string; email: string };
+    }>
+  >(`/api/v1/tenants/${session.activeTenantId}/memberships`).catch(() => []);
+  const installers = members
+    .filter((member) => member.status === "ACTIVE")
+    .map((member) => member.user);
 
   return (
     <div className="space-y-6">
       <Breadcrumbs items={[{ label: "Jobs", href: "/app/jobs" }, { label: job.jobNumber }]} />
-      <PageHeader title={job.jobNumber} description={job.title ?? "Converted customer job"} actions={<StatusBadge status={job.status} color={statusColor(job.status)} />} />
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-stitch">
+        <div className="grid gap-5 border-b border-slate-200 bg-slate-950 p-6 text-white xl:grid-cols-[1fr_auto]">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md bg-white/10 px-2 py-1 font-mono text-xs font-semibold text-slate-200">{job.jobNumber}</span>
+              <StatusBadge status={job.status} color={statusColor(job.status)} />
+              <span className="rounded-full bg-emerald-300/15 px-2.5 py-1 text-xs font-bold uppercase tracking-[0.08em] text-emerald-200">Job Workspace</span>
+            </div>
+            <h1 className="mt-3 max-w-4xl text-headline-lg text-white">{job.title ?? "Converted customer job"}</h1>
+            <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-300">
+              <Link className="inline-flex items-center gap-2 hover:text-white" href={job.customer ? `/app/crm/customers/${job.customer.id}` : "/app/jobs"}>
+                <UserRound className="h-4 w-4" /> {job.customer?.displayName ?? "Customer"}
+              </Link>
+              <Link className="inline-flex items-center gap-2 hover:text-white" href={job.site ? `/app/crm/sites/${job.site.id}` : "/app/jobs"}>
+                <MapPin className="h-4 w-4" /> {job.site?.label ?? "Site"}
+              </Link>
+              <span className="inline-flex items-center gap-2"><CalendarDays className="h-4 w-4" /><DateDisplay date={job.scheduledStart} /></span>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:w-[28rem]">
+            <HeroMetric label="Total Value" value={<Money amount={Number(job.totalValue)} currency={job.currency} />} icon={Banknote} />
+            <HeroMetric label="Deposit" value={depositComplete ? "Paid" : "Outstanding"} icon={CheckCircle2} tone={depositComplete ? "green" : "amber"} />
+            <HeroMetric label="Installer" value={job.assignedInstaller ? `${job.assignedInstaller.firstName} ${job.assignedInstaller.lastName}` : job.installationTeamName ?? "Unassigned"} icon={UserRound} />
+            <HeroMetric label="Materials" value={`${materialRequirements.length} lines`} icon={Boxes} />
+          </div>
+        </div>
+        <div className="p-5">
+          <PageHeader title="Operational Controls" description="Scheduling, material readiness, completion, invoicing, and payment are all connected to the existing job APIs." actions={<StatusBadge status={job.status} color={statusColor(job.status)} />} />
+        </div>
+      </section>
       <SummaryStrip
         items={[
           { label: "Customer", value: job.customer?.displayName ?? "-" },
@@ -160,6 +221,8 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           <h2 className="border-b border-slate-100 pb-2 font-semibold text-slate-950">Work Context</h2>
           <dl className="mt-4 space-y-3 text-sm">
             <div className="flex justify-between"><dt>Branch</dt><dd>{job.branch?.name ?? "-"}</dd></div>
+            <div className="flex justify-between"><dt>Installer</dt><dd>{job.assignedInstaller ? `${job.assignedInstaller.firstName} ${job.assignedInstaller.lastName}` : "-"}</dd></div>
+            <div className="flex justify-between"><dt>Team</dt><dd>{job.installationTeamName ?? "-"}</dd></div>
             <div className="flex justify-between"><dt>Scheduled start</dt><dd><DateDisplay date={job.scheduledStart} /></dd></div>
             <div className="flex justify-between"><dt>Scheduled end</dt><dd><DateDisplay date={job.scheduledEnd} /></dd></div>
             <div className="flex justify-between"><dt>Address</dt><dd className="text-right">{[job.site?.addressLine1, job.site?.city, job.site?.postcode].filter(Boolean).join(", ") || "-"}</dd></div>
@@ -176,6 +239,27 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           </dl>
         </section>
       </div>
+      {job.profitability ? (
+        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-2 border-b border-slate-100 pb-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-950">Job Profitability</h2>
+              <p className="text-sm text-slate-500">Server-calculated revenue, ledger-backed material cost, labour cost, and gross margin.</p>
+            </div>
+            <div className={Number(job.profitability.grossProfit) >= 0 ? "text-right text-green-700" : "text-right text-red-700"}>
+              <div className="text-xs font-medium uppercase tracking-wide">Gross profit</div>
+              <div className="text-xl font-semibold"><Money amount={Number(job.profitability.grossProfit)} currency={job.currency} /></div>
+            </div>
+          </div>
+          <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-md bg-slate-50 p-3"><dt className="text-slate-500">Revenue</dt><dd className="mt-1 font-semibold"><Money amount={Number(job.profitability.revenue)} currency={job.currency} /></dd></div>
+            <div className="rounded-md bg-slate-50 p-3"><dt className="text-slate-500">Material cost</dt><dd className="mt-1 font-semibold"><Money amount={Number(job.profitability.actualMaterialCost)} currency={job.currency} /></dd></div>
+            <div className="rounded-md bg-slate-50 p-3"><dt className="text-slate-500">Labour cost</dt><dd className="mt-1 font-semibold"><Money amount={Number(job.profitability.labourCost)} currency={job.currency} /></dd></div>
+            <div className="rounded-md bg-slate-50 p-3"><dt className="text-slate-500">Total cost</dt><dd className="mt-1 font-semibold"><Money amount={Number(job.profitability.totalCost)} currency={job.currency} /></dd></div>
+            <div className="rounded-md bg-slate-50 p-3"><dt className="text-slate-500">Margin</dt><dd className="mt-1 font-semibold">{Number(job.profitability.grossMarginPercent).toFixed(1)}%</dd></div>
+          </dl>
+        </section>
+      ) : null}
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="border-b border-slate-100 pb-2 font-semibold text-slate-950">Installation Schedule</h2>
         <form action={scheduleJobAction} className="mt-4 grid gap-4 md:grid-cols-2">
@@ -187,6 +271,21 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700">End</span>
             <input className="w-full rounded-md border border-slate-300 px-3 py-2" name="scheduledEnd" type="datetime-local" defaultValue={job.scheduledEnd?.slice(0, 16) ?? ""} required />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Assigned installer</span>
+            <select className="w-full rounded-md border border-slate-300 bg-white px-3 py-2" name="assignedInstallerId" defaultValue={job.assignedInstallerId ?? ""}>
+              <option value="">Unassigned</option>
+              {installers.map((installer) => (
+                <option key={installer.id} value={installer.id}>
+                  {installer.firstName} {installer.lastName} ({installer.email})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-slate-700">Installation team</span>
+            <input className="w-full rounded-md border border-slate-300 px-3 py-2" name="installationTeamName" defaultValue={job.installationTeamName ?? ""} placeholder="Team A, subcontractor crew, or van 2" />
           </label>
           <label className="space-y-1 text-sm md:col-span-2">
             <span className="font-medium text-slate-700">Access notes</span>
@@ -255,6 +354,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                   <div>
                     <div className="text-sm text-slate-500">Invoice</div>
                     <div className="text-lg font-semibold text-slate-950">{activeInvoice.invoiceNumber}</div>
+                    <a className="mt-1 inline-block text-sm font-medium text-blue-600 hover:text-blue-800" href={`/api/v1/invoices/${activeInvoice.id}/pdf`} target="_blank" rel="noreferrer">
+                      Open invoice PDF
+                    </a>
                   </div>
                   <StatusBadge status={activeInvoice.status} color={activeInvoice.status === "PAID" ? "green" : "blue"} />
                 </div>
@@ -297,6 +399,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             </div>
             {Number(activeInvoice.balanceDue) > 0 && perms.canWrite ? (
               <form action={recordPaymentAction} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <input name="jobId" type="hidden" value={job.id} />
                 <input name="invoiceId" type="hidden" value={activeInvoice.id} />
                 <input name="idempotencyKey" type="hidden" value={`${activeInvoice.id}:${activeInvoice.balanceDue}:${Date.now()}`} />
                 <h3 className="font-semibold text-slate-950">Record payment</h3>
@@ -478,6 +581,29 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function HeroMetric({
+  label,
+  value,
+  icon: Icon,
+  tone = "slate",
+}: {
+  label: string;
+  value: React.ReactNode;
+  icon: React.ComponentType<{ className?: string }>;
+  tone?: "slate" | "green" | "amber";
+}) {
+  const toneClass = tone === "green" ? "text-emerald-200" : tone === "amber" ? "text-amber-200" : "text-slate-200";
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/10 p-3">
+      <div className={`flex items-center gap-2 text-label-caps uppercase ${toneClass}`}>
+        <Icon className="h-4 w-4" />
+        {label}
+      </div>
+      <div className="mt-2 truncate font-mono text-sm font-semibold text-white">{value}</div>
     </div>
   );
 }

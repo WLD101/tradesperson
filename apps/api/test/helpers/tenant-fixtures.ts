@@ -3,6 +3,7 @@ import type {
   Branch,
   Customer,
   Invitation,
+  InventoryWarehouse,
   Lead,
   Supplier,
   SupplierContact,
@@ -212,6 +213,9 @@ export type IsolationFixtureSet = {
   branchA1: Branch;
   branchA2: Branch;
   branchB1: Branch;
+  warehouseA1: InventoryWarehouse;
+  warehouseA2: InventoryWarehouse;
+  warehouseB1: InventoryWarehouse;
   ownerA: MembershipWithUser;
   ownerB: MembershipWithUser;
   branchUserA1: MembershipWithUser;
@@ -440,6 +444,36 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
         type: "HEAD_OFFICE",
         isDefault: true,
         city: "Birmingham",
+      },
+    }),
+  ]);
+
+  const [warehouseA1, warehouseA2, warehouseB1] = await Promise.all([
+    prisma.inventoryWarehouse.create({
+      data: {
+        tenantId: tenantA.id,
+        branchId: branchA1.id,
+        code: "A1-MAIN",
+        name: "Tenant A Branch 1 Warehouse",
+        isDefault: true,
+      },
+    }),
+    prisma.inventoryWarehouse.create({
+      data: {
+        tenantId: tenantA.id,
+        branchId: branchA2.id,
+        code: "A2-MAIN",
+        name: "Tenant A Branch 2 Warehouse",
+        isDefault: true,
+      },
+    }),
+    prisma.inventoryWarehouse.create({
+      data: {
+        tenantId: tenantB.id,
+        branchId: branchB1.id,
+        code: "B1-MAIN",
+        name: "Tenant B Branch 1 Warehouse",
+        isDefault: true,
       },
     }),
   ]);
@@ -804,6 +838,9 @@ export const createIsolationFixtures = async (): Promise<IsolationFixtureSet> =>
     branchA1,
     branchA2,
     branchB1,
+    warehouseA1,
+    warehouseA2,
+    warehouseB1,
     ownerA,
     ownerB,
     branchUserA1,

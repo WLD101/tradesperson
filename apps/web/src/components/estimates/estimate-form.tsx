@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { PackageSearch, Plus, Ruler, Send, Sofa, Timer, Trash2 } from "lucide-react";
 import { StickyActionBar } from "@/components/shared";
 import type { ProductRecord } from "@/lib/catalogue";
 import type { Estimate, EstimateLineType } from "@/lib/estimates";
@@ -42,6 +42,9 @@ export function EstimateForm({
   surveys,
   products,
   initialData,
+  initialCustomerId,
+  initialSiteId,
+  initialSurveyId,
 }: {
   branches: Option[];
   customers: Option[];
@@ -49,15 +52,18 @@ export function EstimateForm({
   surveys: Option[];
   products: ProductRecord[];
   initialData?: Estimate;
+  initialCustomerId?: string | undefined;
+  initialSiteId?: string | undefined;
+  initialSurveyId?: string | undefined;
 }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [branchId, setBranchId] = useState(initialData?.branchId ?? branches[0]?.id ?? "");
-  const [customerId, setCustomerId] = useState(initialData?.customerId ?? customers[0]?.id ?? "");
-  const [siteId, setSiteId] = useState(initialData?.siteId ?? "");
-  const [surveyId, setSurveyId] = useState(initialData?.surveyId ?? "");
+  const [customerId, setCustomerId] = useState(initialData?.customerId ?? initialCustomerId ?? customers[0]?.id ?? "");
+  const [siteId, setSiteId] = useState(initialData?.siteId ?? initialSiteId ?? "");
+  const [surveyId, setSurveyId] = useState(initialData?.surveyId ?? initialSurveyId ?? "");
   const [title, setTitle] = useState(initialData?.title ?? "");
   const [internalNotes, setInternalNotes] = useState(initialData?.internalNotes ?? "");
   const [customerNotes, setCustomerNotes] = useState(initialData?.customerNotes ?? "");
@@ -120,6 +126,12 @@ export function EstimateForm({
 
   const filteredSites = sites.filter((site) => !customerId || site.customerId === customerId);
   const filteredSurveys = surveys.filter((survey) => !siteId || survey.siteId === siteId);
+  const subtotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitSellPrice || 0), 0);
+  const costTotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitCost || 0), 0);
+  const vatTotal = lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitSellPrice || 0) * Number(line.vatRate || vatRate || 0), 0);
+  const grandTotal = subtotal + vatTotal;
+  const marginPercent = subtotal > 0 ? ((subtotal - costTotal) / subtotal) * 100 : 0;
+  const totalArea = rooms.reduce((sum, room) => sum + Number(room.netArea || 0), 0);
 
   const updateRoom = (id: string, field: keyof EditableRoom, value: string) => {
     setRooms((current) =>
@@ -204,8 +216,18 @@ export function EstimateForm({
         </div>
       ) : null}
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">Estimate Details</h2>
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-stitch">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-label-caps uppercase text-emerald-700">{initialData ? initialData.estimateNumber : "Drafting phase"}</p>
+            <h2 className="mt-2 text-headline-md text-slate-950">{title || "Luxury flooring installation"}</h2>
+            <p className="mt-2 text-sm text-slate-500">Build rooms, material lines, margin, and customer-facing totals without changing estimate calculations.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700"><Ruler className="h-4 w-4" /> {totalArea.toFixed(2)} m2</span>
+            <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700"><PackageSearch className="h-4 w-4" /> {lines.length} lines</span>
+          </div>
+        </div>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="space-y-1 text-sm">
             <span className="font-medium text-slate-700">Title</span>
@@ -244,22 +266,42 @@ export function EstimateForm({
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="grid min-w-0 gap-6 2xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="min-w-0 space-y-6">
+      <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-stitch">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-950">Rooms</h2>
-          <button type="button" onClick={() => setRooms((current) => [...current, { id: crypto.randomUUID(), roomName: "New room", grossArea: "0", deductionArea: "0", netArea: "0", wastePercent: "10", perimeter: "0", notes: "" }])} className="inline-flex items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200">
+          <div className="flex items-center gap-2">
+            <Sofa className="h-5 w-5 text-emerald-700" />
+            <h2 className="text-title-md text-slate-950">Rooms / Areas</h2>
+          </div>
+          <button type="button" onClick={() => setRooms((current) => [...current, { id: crypto.randomUUID(), roomName: "New room", grossArea: "0", deductionArea: "0", netArea: "0", wastePercent: "10", perimeter: "0", notes: "" }])} className="inline-flex items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200">
             <Plus className="h-4 w-4" /> Add Room
           </button>
         </div>
         <div className="mt-4 space-y-3">
           {rooms.map((room) => (
-            <div key={room.id} className="grid gap-3 rounded-md border border-slate-200 p-3 md:grid-cols-[1.5fr_repeat(4,1fr)_auto]">
-              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={room.roomName} onChange={(event) => updateRoom(room.id, "roomName", event.target.value)} placeholder="Room" />
-              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={room.netArea} onChange={(event) => updateRoom(room.id, "netArea", event.target.value)} placeholder="Net m2" />
-              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={room.wastePercent} onChange={(event) => updateRoom(room.id, "wastePercent", event.target.value)} placeholder="Waste %" />
-              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={room.perimeter} onChange={(event) => updateRoom(room.id, "perimeter", event.target.value)} placeholder="Perimeter" />
-              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={room.notes} onChange={(event) => updateRoom(room.id, "notes", event.target.value)} placeholder="Notes" />
-              <button type="button" onClick={() => setRooms((current) => current.filter((item) => item.id !== room.id))} className="rounded-md p-2 text-slate-500 hover:bg-red-50 hover:text-red-600">
+            <div key={room.id} className="grid min-w-0 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 xl:grid-cols-6">
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:col-span-2 xl:col-span-2">
+                Room
+                <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal" value={room.roomName} onChange={(event) => updateRoom(room.id, "roomName", event.target.value)} placeholder="Room" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Net m2
+                <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal" value={room.netArea} onChange={(event) => updateRoom(room.id, "netArea", event.target.value)} placeholder="Net m2" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Waste %
+                <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal" value={room.wastePercent} onChange={(event) => updateRoom(room.id, "wastePercent", event.target.value)} placeholder="Waste %" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Perimeter
+                <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal" value={room.perimeter} onChange={(event) => updateRoom(room.id, "perimeter", event.target.value)} placeholder="Perimeter" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:col-span-2 xl:col-span-1">
+                Notes
+                <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal" value={room.notes} onChange={(event) => updateRoom(room.id, "notes", event.target.value)} placeholder="Notes" />
+              </label>
+              <button type="button" onClick={() => setRooms((current) => current.filter((item) => item.id !== room.id))} className="self-end rounded-md p-2 text-slate-500 hover:bg-red-50 hover:text-red-600">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
@@ -267,35 +309,92 @@ export function EstimateForm({
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 shadow-stitch">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-950">Estimate Lines</h2>
-          <button type="button" onClick={() => setLines((current) => [...current, { id: crypto.randomUUID(), lineType: "MATERIAL", productId: firstProduct?.id ?? "", productVariantId: firstProduct?.variants.find((variant) => variant.isDefault)?.id ?? "", description: firstProduct?.name ?? "New line", quantity: "1", unit: firstProduct?.primaryUnit.code ?? "SQM", unitCost: "0", unitSellPrice: "0", vatRate, notes: "" }])} className="inline-flex items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200">
+          <div className="flex items-center gap-2">
+            <PackageSearch className="h-5 w-5 text-emerald-700" />
+            <h2 className="text-title-md text-slate-950">Material Lookup & Lines</h2>
+          </div>
+          <button type="button" onClick={() => setLines((current) => [...current, { id: crypto.randomUUID(), lineType: "MATERIAL", productId: firstProduct?.id ?? "", productVariantId: firstProduct?.variants.find((variant) => variant.isDefault)?.id ?? "", description: firstProduct?.name ?? "New line", quantity: "1", unit: firstProduct?.primaryUnit.code ?? "SQM", unitCost: "0", unitSellPrice: "0", vatRate, notes: "" }])} className="inline-flex items-center gap-2 rounded-md bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200">
             <Plus className="h-4 w-4" /> Add Line
           </button>
         </div>
         <div className="mt-4 space-y-3">
           {lines.map((line) => (
-            <div key={line.id} className="grid gap-3 rounded-md border border-slate-200 p-3 md:grid-cols-[120px_1.5fr_repeat(5,1fr)_auto]">
-              <select className="rounded-md border border-slate-300 px-2 py-2 text-sm" value={line.lineType} onChange={(event) => updateLine(line.id, "lineType", event.target.value as EstimateLineType)}>
+            <div key={line.id} className="grid min-w-0 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 xl:grid-cols-6">
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Type
+                <select className="w-full rounded-md border border-slate-300 px-2 py-2 text-sm font-normal normal-case tracking-normal" value={line.lineType} onChange={(event) => updateLine(line.id, "lineType", event.target.value as EstimateLineType)}>
                 {["MATERIAL", "LABOUR", "ACCESSORY", "SERVICE", "DISCOUNT"].map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
-              <select className="rounded-md border border-slate-300 px-2 py-2 text-sm" value={line.productId} onChange={(event) => updateLine(line.id, "productId", event.target.value)}>
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Product
+                <select className="w-full rounded-md border border-slate-300 px-2 py-2 text-sm font-normal normal-case tracking-normal" value={line.productId} onChange={(event) => updateLine(line.id, "productId", event.target.value)}>
                 <option value="">Manual line</option>
                 {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
               </select>
-              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={line.description} onChange={(event) => updateLine(line.id, "description", event.target.value)} placeholder="Description" />
-              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={line.quantity} onChange={(event) => updateLine(line.id, "quantity", event.target.value)} placeholder="Qty" />
-              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={line.unit} onChange={(event) => updateLine(line.id, "unit", event.target.value)} placeholder="Unit" />
-              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={line.unitCost} onChange={(event) => updateLine(line.id, "unitCost", event.target.value)} placeholder="Cost" />
-              <input className="rounded-md border border-slate-300 px-3 py-2 text-sm" value={line.unitSellPrice} onChange={(event) => updateLine(line.id, "unitSellPrice", event.target.value)} placeholder="Sell" />
-              <button type="button" onClick={() => setLines((current) => current.filter((item) => item.id !== line.id))} className="rounded-md p-2 text-slate-500 hover:bg-red-50 hover:text-red-600">
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 sm:col-span-2 xl:col-span-2">
+                Description
+                <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal" value={line.description} onChange={(event) => updateLine(line.id, "description", event.target.value)} placeholder="Description" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Qty
+                <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal" value={line.quantity} onChange={(event) => updateLine(line.id, "quantity", event.target.value)} placeholder="Qty" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Unit
+                <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal" value={line.unit} onChange={(event) => updateLine(line.id, "unit", event.target.value)} placeholder="Unit" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Cost
+                <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal" value={line.unitCost} onChange={(event) => updateLine(line.id, "unitCost", event.target.value)} placeholder="Cost" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">
+                Sell
+                <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm font-normal normal-case tracking-normal" value={line.unitSellPrice} onChange={(event) => updateLine(line.id, "unitSellPrice", event.target.value)} placeholder="Sell" />
+              </label>
+              <button type="button" onClick={() => setLines((current) => current.filter((item) => item.id !== line.id))} className="self-end rounded-md p-2 text-slate-500 hover:bg-red-50 hover:text-red-600">
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
           ))}
         </div>
       </section>
+      </div>
+
+      <aside className="space-y-6 2xl:sticky 2xl:top-24 2xl:self-start">
+        <section className="rounded-2xl border border-slate-950 bg-slate-950 p-6 text-white shadow-stitch-overlay">
+          <p className="text-label-caps uppercase text-slate-400">Estimate Summary</p>
+          <dl className="mt-6 space-y-4">
+            <div className="flex items-center justify-between gap-3 text-slate-300"><dt>Subtotal</dt><dd className="font-mono text-xl font-semibold text-white">£{subtotal.toFixed(2)}</dd></div>
+            <div className="flex items-center justify-between gap-3 text-slate-300"><dt>VAT</dt><dd className="font-mono text-xl font-semibold text-white">£{vatTotal.toFixed(2)}</dd></div>
+            <div className="border-t border-white/10 pt-5">
+              <dt className="text-slate-400">Grand Total</dt>
+              <dd className="mt-2 font-mono text-5xl font-bold text-emerald-300">£{grandTotal.toFixed(2)}</dd>
+            </div>
+          </dl>
+          <div className="mt-6 rounded-xl bg-white/10 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-label-caps uppercase text-slate-400">Project Margin</span>
+              <strong className="font-mono text-xl text-emerald-300">{marginPercent.toFixed(1)}%</strong>
+            </div>
+            <div className="mt-3 h-2 rounded-full bg-white/10">
+              <div className="h-2 rounded-full bg-emerald-300" style={{ width: `${Math.max(0, Math.min(100, marginPercent))}%` }} />
+            </div>
+            <p className="mt-3 text-sm text-emerald-200">Preview only; saved totals remain server-calculated after submission.</p>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-stitch">
+          <div className="flex items-center gap-2">
+            <Timer className="h-5 w-5 text-slate-700" />
+            <h2 className="text-title-md text-slate-950">Send Actions</h2>
+          </div>
+          <p className="mt-3 text-sm text-slate-500">Save this estimate first, then use the existing estimate detail actions to progress it into the quote workflow.</p>
+        </section>
+      </aside>
+      </div>
 
       <section className="grid gap-4 md:grid-cols-2">
         <label className="space-y-1 text-sm">
@@ -312,7 +411,8 @@ export function EstimateForm({
         <button type="button" onClick={() => router.back()} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
           Cancel
         </button>
-        <button disabled={isSubmitting || !customerId || !siteId || lines.length === 0} type="submit" className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
+        <button disabled={isSubmitting || !customerId || !siteId || lines.length === 0} type="submit" className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">
+          <Send className="h-4 w-4" />
           {isSubmitting ? "Saving..." : initialData ? "Update Estimate" : "Create Estimate"}
         </button>
       </StickyActionBar>

@@ -315,6 +315,14 @@ export async function getPurchaseOrder(id: string) {
   return apiFetch<PurchaseOrder>(`/api/v1/purchase-orders/${id}`);
 }
 
+export async function getPurchaseOrderGoodsReceipts(id: string) {
+  return apiFetch<GoodsReceipt[]>(`/api/v1/purchase-orders/${id}/goods-receipts`);
+}
+
+export async function getGoodsReceipt(id: string) {
+  return apiFetch<GoodsReceipt>(`/api/v1/goods-receipts/${id}`);
+}
+
 export async function getPurchaseOrderPrint(id: string) {
   return apiFetch<PurchaseOrder>(`/api/v1/purchase-orders/${id}/print`);
 }

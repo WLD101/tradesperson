@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Module, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Header, Module, Param, Post, Query, StreamableFile, UseGuards } from "@nestjs/common";
 import { JobStatus } from "@prisma/client/index";
 import { z } from "zod";
 import { JobsService } from "../services/jobs.service";
@@ -17,11 +17,23 @@ const listQuerySchema = z.object({
   status: z.string().trim().min(1).max(60).optional(),
 });
 
+const scheduleQuerySchema = z.object({
+  start: z.coerce.date(),
+  end: z.coerce.date(),
+  branchId: z.preprocess(emptyStringToNull, z.string().uuid().nullable()).optional(),
+  installerId: z.preprocess(emptyStringToNull, z.string().uuid().nullable()).optional(),
+  status: z.preprocess(emptyStringToNull, z.string().trim().min(1).max(60).nullable()).optional(),
+  search: z.preprocess(emptyStringToNull, z.string().trim().min(1).max(120).nullable()).optional(),
+  unscheduledLimit: z.coerce.number().int().min(1).max(50).optional(),
+});
+
 const createJobSchema = z.object({
   status: z.nativeEnum(JobStatus).optional(),
   title: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
   scheduledStart: z.coerce.date().nullable().optional(),
   scheduledEnd: z.coerce.date().nullable().optional(),
+  assignedInstallerId: z.preprocess(emptyStringToNull, z.string().uuid().nullable()).optional(),
+  installationTeamName: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
   accessNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
   workNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
 });
@@ -36,6 +48,8 @@ const createRequisitionFromRequirementsSchema = z.object({
 const scheduleJobSchema = z.object({
   scheduledStart: z.coerce.date(),
   scheduledEnd: z.coerce.date(),
+  assignedInstallerId: z.preprocess(emptyStringToNull, z.string().uuid().nullable()).optional(),
+  installationTeamName: z.preprocess(emptyStringToNull, z.string().max(255).nullable()).optional(),
   accessNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
   workNotes: z.preprocess(emptyStringToNull, z.string().max(4000).nullable()).optional(),
 });
@@ -82,6 +96,13 @@ class JobsController {
   @RequirePermissions("job:read")
   listJobs(@Query() query: unknown, @CurrentSession() session: TenantSession) {
     return this.jobs.listJobs(session, listQuerySchema.parse(query));
+  }
+
+  @Get("jobs/schedule")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:read")
+  listSchedule(@Query() query: unknown, @CurrentSession() session: TenantSession) {
+    return this.jobs.listSchedule(session, scheduleQuerySchema.parse(query));
   }
 
   @Get("jobs/:id")
@@ -156,6 +177,13 @@ class JobsController {
     return this.jobs.scheduleJob(session, id, scheduleJobSchema.parse(body));
   }
 
+  @Post("jobs/:id/unschedule")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:write")
+  unscheduleJob(@Param("id") id: string, @CurrentSession() session: TenantSession) {
+    return this.jobs.unscheduleJob(session, id);
+  }
+
   @Post("jobs/:id/complete")
   @UseGuards(AuthGuard, PermissionsGuard)
   @RequirePermissions("job:write")
@@ -183,6 +211,18 @@ class JobsController {
     @CurrentSession() session: TenantSession,
   ) {
     return this.jobs.recordInvoicePayment(session, invoiceId, recordPaymentSchema.parse(body));
+  }
+
+  @Get("invoices/:invoiceId/pdf")
+  @Header("Content-Type", "application/pdf")
+  @Header("Content-Disposition", "inline; filename=\"invoice.pdf\"")
+  @UseGuards(AuthGuard, PermissionsGuard)
+  @RequirePermissions("job:read")
+  async invoicePdf(
+    @Param("invoiceId") invoiceId: string,
+    @CurrentSession() session: TenantSession,
+  ) {
+    return new StreamableFile(await this.jobs.generateInvoicePdf(session, invoiceId));
   }
 }
 

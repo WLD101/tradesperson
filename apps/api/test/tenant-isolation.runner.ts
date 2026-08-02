@@ -20,10 +20,30 @@ type TestCase = {
   run: () => Promise<void>;
 };
 
+const caseTimeoutMs = Number(process.env.ISOLATION_CASE_TIMEOUT_MS || 30000);
+const setupTimeoutMs = Number(process.env.ISOLATION_SETUP_TIMEOUT_MS || 90000);
+const requestTimeoutMs = Number(process.env.ISOLATION_REQUEST_TIMEOUT_MS || 10000);
 const baseUrl = process.env.API_URL;
 if (!baseUrl) {
   throw new Error("process.env.API_URL must be defined for isolation tests");
 }
+
+const withTimeout = async <T>(label: string, task: Promise<T>, timeoutMs = caseTimeoutMs) => {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+};
 
 class HttpClient {
   private cookieHeader = "";
@@ -60,18 +80,26 @@ class HttpClient {
 
   private async request(method: string, path: string, body?: unknown) {
     const isFormData = body instanceof FormData;
-    const response = await fetch(`${this.origin}${path}`, {
-      method,
-      headers: {
-        ...(isFormData ? {} : { "content-type": "application/json" }),
-        ...(this.cookieHeader ? { cookie: this.cookieHeader } : {}),
-      },
-      ...(body !== undefined
-        ? {
-            body: isFormData ? body : JSON.stringify(body),
-          }
-        : {}),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(`${this.origin}${path}`, {
+        method,
+        signal: controller.signal,
+        headers: {
+          ...(isFormData ? {} : { "content-type": "application/json" }),
+          ...(this.cookieHeader ? { cookie: this.cookieHeader } : {}),
+        },
+        ...(body !== undefined
+          ? {
+              body: isFormData ? body : JSON.stringify(body),
+            }
+          : {}),
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     const setCookies =
       typeof (response.headers as Headers & { getSetCookie?: () => string[] })
@@ -176,6 +204,69 @@ const executeImportLifecycle = async (
   assert.equal(executeResponse.status, 201);
 
   return executeResponse.body as { id: string; priceListId: string };
+};
+
+const createIssuedPurchaseOrder = async (
+  agent: HttpClient,
+  input: {
+    branchId: string;
+    supplierId: string;
+    productId: string;
+    unit: string;
+    quantity?: number;
+  },
+) => {
+  const order = await agent.post("/api/v1/purchase-orders").send({
+    branchId: input.branchId,
+    supplierId: input.supplierId,
+    currency: "GBP",
+    lines: [
+      {
+        productId: input.productId,
+        description: "Isolation receipt line",
+        quantity: input.quantity ?? 2,
+        unit: input.unit,
+        taxRate: 0.2,
+        displayOrder: 1,
+      },
+    ],
+  });
+  assert.equal(order.status, 201);
+
+  const submit = await agent.post(`/api/v1/purchase-orders/${order.body.id}/submit`).send({});
+  assert.equal(submit.status, 201);
+  const approve = await agent.post(`/api/v1/purchase-orders/${order.body.id}/approve`).send({});
+  assert.equal(approve.status, 201);
+  const issue = await agent.post(`/api/v1/purchase-orders/${order.body.id}/issue`).send({});
+  assert.equal(issue.status, 201);
+
+  return issue.body as {
+    id: string;
+    versions: Array<{ lines: Array<{ id: string }> }>;
+  };
+};
+
+const createDraftGoodsReceipt = async (
+  agent: HttpClient,
+  order: { id: string; versions: Array<{ lines: Array<{ id: string }> }> },
+  quantity = 1,
+) => {
+  const lineId = order.versions[0]?.lines[0]?.id;
+  assert.ok(lineId, "purchase order response must include a receivable line");
+
+  const receipt = await agent.post(`/api/v1/purchase-orders/${order.id}/goods-receipts`).send({
+    idempotencyKey: `iso-gr-${order.id}-${quantity}`,
+    lines: [
+      {
+        purchaseOrderLineId: lineId,
+        receivedQuantity: quantity,
+        damagedQuantity: 0,
+        rejectedQuantity: 0,
+      },
+    ],
+  });
+  assert.equal(receipt.status, 201);
+  return receipt.body as { id: string; branchId: string };
 };
 
 const buildSavedMapping = () => ({
@@ -561,6 +652,59 @@ const tests: TestCase[] = [
         suppliers.body.items.map((item: { id: string }) => item.id).sort(),
         [fixtures.supplierA.id].sort(),
       );
+    },
+  },
+  {
+    name: "customer 360 returns tenant-scoped summary and related records",
+    run: async () => {
+      const response = await ownerAAgent.get(`/api/v1/customers/${fixtures.customerA1.id}/360`);
+      assert.equal(response.status, 200);
+      assert.equal(response.body.customer.id, fixtures.customerA1.id);
+      assert.ok(response.body.summary.siteCount >= 1);
+      assert.ok(response.body.related.sites.every((site: { customerId?: string }) => site.customerId === undefined || site.customerId === fixtures.customerA1.id));
+      assert.ok(Array.isArray(response.body.timeline));
+    },
+  },
+  {
+    name: "tenant A cannot read tenant B customer 360",
+    run: async () => {
+      const response = await ownerAAgent.get(`/api/v1/customers/${fixtures.customerB1.id}/360`);
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "branch user cannot read another branch customer 360",
+    run: async () => {
+      const response = await branchA1Agent.get(`/api/v1/customers/${fixtures.customerA2.id}/360`);
+      assert.equal(response.status, 404);
+    },
+  },
+  {
+    name: "global search returns tenant-scoped customer results",
+    run: async () => {
+      const response = await ownerAAgent.get(
+        `/api/v1/search?q=${encodeURIComponent(fixtures.customerA1.displayName)}`,
+      );
+      assert.equal(response.status, 200);
+      const results = response.body.results as Array<{ href: string; title: string }>;
+      assert.ok(results.some((item) => item.href === `/app/crm/customers/${fixtures.customerA1.id}`));
+      assert.ok(!results.some((item) => item.href.includes(fixtures.customerB1.id)));
+    },
+  },
+  {
+    name: "global search hides other tenant and branch records",
+    run: async () => {
+      const tenantResponse = await ownerAAgent.get(
+        `/api/v1/search?q=${encodeURIComponent(fixtures.customerB1.displayName)}`,
+      );
+      assert.equal(tenantResponse.status, 200);
+      assert.equal((tenantResponse.body.results as unknown[]).length, 0);
+
+      const branchResponse = await branchA1Agent.get(
+        `/api/v1/search?q=${encodeURIComponent(fixtures.customerA2.displayName)}`,
+      );
+      assert.equal(branchResponse.status, 200);
+      assert.equal((branchResponse.body.results as unknown[]).length, 0);
     },
   },
   {
@@ -1370,6 +1514,94 @@ const tests: TestCase[] = [
       const response = await ownerAAgent.get(`/api/v1/purchase-orders/${poB.body.id}`);
       assert.equal(response.status, 404);
     }
+  },
+  {
+    name: "viewer cannot create goods receipt",
+    run: async () => {
+      const order = await createIssuedPurchaseOrder(ownerAAgent, {
+        branchId: fixtures.branchA1.id,
+        supplierId: fixtures.supplierA.id,
+        productId: fixtures.productA.id,
+        unit: "ROLL",
+      });
+      const lineId = order.versions[0]!.lines[0]!.id;
+
+      const response = await viewerAgent
+        .post(`/api/v1/purchase-orders/${order.id}/goods-receipts`)
+        .send({
+          lines: [
+            {
+              purchaseOrderLineId: lineId,
+              receivedQuantity: 1,
+              damagedQuantity: 0,
+              rejectedQuantity: 0,
+            },
+          ],
+        });
+      assert.equal(response.status, 403);
+    }
+  },
+  {
+    name: "tenant A cannot access tenant B goods receipt",
+    run: async () => {
+      const orderB = await createIssuedPurchaseOrder(ownerBAgent, {
+        branchId: fixtures.branchB1.id,
+        supplierId: fixtures.supplierB.id,
+        productId: fixtures.productB.id,
+        unit: "PACK",
+      });
+      const receiptB = await createDraftGoodsReceipt(ownerBAgent, orderB);
+
+      const getResponse = await ownerAAgent.get(`/api/v1/goods-receipts/${receiptB.id}`);
+      assert.equal(getResponse.status, 404);
+
+      const listResponse = await ownerAAgent.get(`/api/v1/purchase-orders/${orderB.id}/goods-receipts`);
+      assert.equal(listResponse.status, 404);
+    }
+  },
+  {
+    name: "branch user cannot access another branch goods receipt",
+    run: async () => {
+      const orderA2 = await createIssuedPurchaseOrder(ownerAAgent, {
+        branchId: fixtures.branchA2.id,
+        supplierId: fixtures.supplierA.id,
+        productId: fixtures.productA.id,
+        unit: "ROLL",
+      });
+      const receiptA2 = await createDraftGoodsReceipt(ownerAAgent, orderA2);
+
+      const getResponse = await branchA1Agent.get(`/api/v1/goods-receipts/${receiptA2.id}`);
+      assert.equal(getResponse.status, 404);
+
+      const listResponse = await branchA1Agent.get(`/api/v1/purchase-orders/${orderA2.id}/goods-receipts`);
+      assert.equal(listResponse.status, 404);
+    }
+  },
+  {
+    name: "branch inventory reconciliation excludes other branches",
+    run: async () => {
+      const orderA2 = await createIssuedPurchaseOrder(ownerAAgent, {
+        branchId: fixtures.branchA2.id,
+        supplierId: fixtures.supplierA.id,
+        productId: fixtures.productA.id,
+        unit: "ROLL",
+      });
+      const receiptA2 = await createDraftGoodsReceipt(ownerAAgent, orderA2);
+      const postResponse = await ownerAAgent.post(`/api/v1/goods-receipts/${receiptA2.id}/post`).send({});
+      assert.equal(postResponse.status, 201);
+
+      const ownerResponse = await ownerAAgent.get("/api/v1/inventory/reconciliation");
+      assert.equal(ownerResponse.status, 200);
+      assert.ok(
+        ownerResponse.body.rows.some((row: { branchId: string }) => row.branchId === fixtures.branchA2.id),
+      );
+
+      const branchResponse = await branchA1Agent.get("/api/v1/inventory/reconciliation");
+      assert.equal(branchResponse.status, 200);
+      assert.ok(
+        branchResponse.body.rows.every((row: { branchId: string }) => row.branchId !== fixtures.branchA2.id),
+      );
+    }
   }
 ];
 
@@ -1383,19 +1615,22 @@ const main = async () => {
     await recreateTestDatabase();
   }
 
-  for (const test of tests) {
-    await setupCase();
-    try {
-      await test.run();
-      console.log(`PASS ${test.name}`);
-    } catch (error) {
-      failed += 1;
-      console.error(`FAIL ${test.name}`);
-      console.error(error);
+  try {
+    for (const test of tests) {
+      console.log(`RUN ${test.name}`);
+      try {
+        await withTimeout(`${test.name} setup`, setupCase(), setupTimeoutMs);
+        await withTimeout(test.name, test.run());
+        console.log(`PASS ${test.name}`);
+      } catch (error) {
+        failed += 1;
+        console.error(`FAIL ${test.name}`);
+        console.error(error);
+      }
     }
+  } finally {
+    await disconnectDatabase();
   }
-
-  await disconnectDatabase();
 
   const passed = tests.length - failed;
   console.log(`tenant isolation tests: ${passed} passed, ${failed} failed in ${Date.now() - startedAt}ms`);

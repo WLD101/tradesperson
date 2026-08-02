@@ -1,5 +1,8 @@
 process.env.NODE_ENV='test';
-process.env.DATABASE_URL='postgresql://postgres:postgres@localhost:55432/tradesperson_erp_isolation_test';
+const testDatabaseUrl = new URL('postgresql://localhost:55432/tradesperson_erp_isolation_test');
+testDatabaseUrl.username = 'postgres';
+testDatabaseUrl.password = 'postgres';
+process.env.DATABASE_URL=testDatabaseUrl.toString();
 process.env.DIRECT_URL=process.env.DATABASE_URL;
 process.env.REDIS_URL='redis://localhost:6379';
 process.env.WEB_URL='http://localhost:3000';

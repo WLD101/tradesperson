@@ -7,7 +7,7 @@
     "dev": "next dev",
     "start": "next start",
     "lint": "eslint src --max-warnings=0",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "next typegen && tsc -p tsconfig.typecheck.json --noEmit",
     "test": "pnpm exec vitest run --passWithNoTests --exclude e2e/**",
     "test:e2e": "pnpm exec playwright test"
   },

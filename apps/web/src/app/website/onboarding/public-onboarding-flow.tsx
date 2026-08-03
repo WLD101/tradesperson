@@ -18,23 +18,23 @@ const packages: TrialPackage[] = [
   {
     key: "starter",
     name: "Starter",
-    price: "GBP 99",
-    strapline: "Small flooring teams",
-    bestFor: "1 branch, owner-led operations",
+    price: "Pricing on request",
+    strapline: "Owner-led trade teams",
+    bestFor: "1 branch, early connected operations",
     features: ["CRM and surveys", "Estimates and quotes", "Job scheduling", "Invoice/payment workflow"],
   },
   {
     key: "pro",
     name: "Pro",
-    price: "GBP 199",
-    strapline: "Growing installers",
-    bestFor: "Multi-team flooring operations",
+    price: "Pricing on request",
+    strapline: "Growing field teams",
+    bestFor: "Multi-team trade operations",
     features: ["Everything in Starter", "Inventory and procurement", "Supplier price imports", "Installer field app"],
   },
   {
     key: "enterprise",
     name: "Enterprise",
-    price: "Custom",
+    price: "Contact sales",
     strapline: "Multi-branch control",
     bestFor: "Branches, roles, approval controls",
     features: ["Everything in Pro", "Advanced permissions", "Branch isolation", "Implementation support"],
@@ -108,7 +108,7 @@ export function PublicOnboardingFlow() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">Choose industry</p>
-              <h2 className="mt-2 text-2xl font-black tracking-tight">Tradesperson ERP is expanding beyond flooring</h2>
+              <h2 className="mt-2 text-2xl font-black tracking-tight">Tradesperson Network is built for the wider trades sector</h2>
             </div>
             <Sparkles className="h-6 w-6 text-emerald-700" />
           </div>
@@ -152,7 +152,7 @@ export function PublicOnboardingFlow() {
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-stitch">
           <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-700">Step 1 - Business details</p>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <Field label="Company name" name="companyName" placeholder="Example Flooring Ltd" required />
+            <Field label="Company name" name="companyName" placeholder="Example Trade Services Ltd" required />
             <Field label="Contact name" name="contactName" placeholder="Olivia Owner" required />
             <Field label="Work email" name="email" placeholder="owner@example.com" required type="email" />
             <Field label="Phone" name="phone" placeholder="+44..." />
@@ -191,7 +191,7 @@ export function PublicOnboardingFlow() {
                   {packageKey === plan.key ? <CheckCircle2 className="h-6 w-6 text-emerald-700" /> : null}
                 </div>
                 <p className="mt-5 font-mono text-4xl font-black">{plan.price}</p>
-                <p className="mt-1 text-sm text-slate-500">per month after 30-day trial</p>
+                <p className="mt-1 text-sm text-slate-500">commercial route confirmed during onboarding</p>
                 <p className="mt-4 text-sm font-bold text-slate-700">{plan.bestFor}</p>
               </button>
             ))}
@@ -207,8 +207,8 @@ export function PublicOnboardingFlow() {
           </div>
           <h2 className="mt-5 text-3xl font-black">{selectedPackage.name} package</h2>
           <p className="mt-2 text-slate-300">{selectedPackage.bestFor}</p>
-          <p className="mt-6 font-mono text-5xl font-black text-emerald-300">{selectedPackage.price}</p>
-          <p className="mt-1 text-sm text-slate-400">30 days free, then monthly billing.</p>
+          <p className="mt-6 font-mono text-4xl font-black text-emerald-300">{selectedPackage.price}</p>
+          <p className="mt-1 text-sm text-slate-400">billing and rollout details are confirmed through the secure onboarding path.</p>
           <div className="mt-6 space-y-3">
             {selectedPackage.features.map((feature) => (
               <p key={feature} className="flex gap-2 text-sm text-slate-200"><CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-300" /> {feature}</p>
@@ -217,7 +217,7 @@ export function PublicOnboardingFlow() {
           {error ? <p className="mt-5 rounded-2xl bg-red-500/15 p-3 text-sm font-semibold text-red-100">{error}</p> : null}
           <button className="mt-6 inline-flex w-full min-h-12 items-center justify-center gap-2 rounded-full bg-emerald-300 px-5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-60" disabled={submitting} type="submit">
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
-            {submitting ? "Opening Stripe..." : "Start 30-day trial"}
+            {submitting ? "Opening checkout..." : "Continue setup"}
           </button>
         </section>
         <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-stitch">
@@ -225,7 +225,7 @@ export function PublicOnboardingFlow() {
             <ShieldCheck className="h-6 w-6 shrink-0 text-emerald-700" />
             <div>
               <h2 className="font-black">Secure payment info</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">Payment details are collected by Stripe Checkout. No card details are stored in this app.</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">When billing is part of the onboarding route, payment collection is handled by Stripe Checkout. Card details are never stored in this app.</p>
             </div>
           </div>
         </section>

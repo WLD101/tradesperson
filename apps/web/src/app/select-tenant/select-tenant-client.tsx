@@ -46,7 +46,7 @@ export function SelectTenantClient({
 
   return (
     <IndustrialAuthShell headline="Choose the workspace context for this secure session.">
-      <AuthCard eyebrow="Workspace selection" subtitle="Tenant and branch context keep every flooring operation isolated and auditable." title="Select workspace">
+      <AuthCard eyebrow="Workspace selection" subtitle="Tenant and branch context keep every trade operation isolated and auditable." title="Select workspace">
         <div className="space-y-3">
           {activeMemberships.length > 0 ? (
             activeMemberships.map((membership) => (

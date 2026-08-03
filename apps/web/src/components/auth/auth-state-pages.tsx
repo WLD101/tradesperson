@@ -18,13 +18,13 @@ import {
 export function SignUpExperience() {
   return (
     <IndustrialAuthShell>
-      <AuthCard eyebrow="Create workspace" subtitle="Start setup immediately after account creation." title="Build your flooring command centre">
+      <AuthCard eyebrow="Create workspace" subtitle="Start setup immediately after account creation." title="Build your trade command centre">
         <form className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <AuthInput label="Full Name" name="name" placeholder="Olivia Owner" />
             <AuthInput label="Business Email" name="email" placeholder="owner@example.com" type="email" />
           </div>
-          <AuthInput label="Company Name" name="company" placeholder="Example Flooring Ltd" />
+          <AuthInput label="Company Name" name="company" placeholder="Example Trade Co" />
           <div className="grid gap-4 sm:grid-cols-2">
             <AuthInput label="Password" name="password" type="password" />
             <AuthInput label="Confirm Password" name="confirmPassword" type="password" />
@@ -45,7 +45,7 @@ export function SignUpExperience() {
 
 export function ForgotPasswordExperience() {
   return (
-    <IndustrialAuthShell headline="Recover secure access to your flooring workspace.">
+    <IndustrialAuthShell headline="Recover secure access to your trade workspace.">
       <AuthCard eyebrow="Password recovery" subtitle="Enter your work email and we will send a secure reset link when backend email delivery is enabled." title="Forgot password">
         <form className="space-y-4">
           <AuthInput label="Work Email" name="email" placeholder="owner@example.com" type="email" />
@@ -203,12 +203,12 @@ function StateExperience({
 
 export function TenantCreationExperience() {
   return (
-    <IndustrialAuthShell headline="Create the tenant foundation for your flooring business.">
+    <IndustrialAuthShell headline="Create the tenant foundation for your trade business.">
       <AuthCard eyebrow="Tenant creation" subtitle="Create the first business context before onboarding branches, products, suppliers, and installers." title="Create tenant">
         <form className="space-y-4">
-          <AuthInput label="Business Name" name="name" placeholder="Example Flooring Ltd" />
-          <AuthInput label="Workspace Slug" name="slug" placeholder="example-flooring" />
-          <AuthInput label="Legal Name" name="legalName" placeholder="Example Flooring Limited" />
+          <AuthInput label="Business Name" name="name" placeholder="Example Trade Co" />
+          <AuthInput label="Workspace Slug" name="slug" placeholder="example-trades" />
+          <AuthInput label="Legal Name" name="legalName" placeholder="Example Trade Company Limited" />
           <AuthPrimaryLink href="/onboarding-entry">Create Tenant</AuthPrimaryLink>
         </form>
       </AuthCard>

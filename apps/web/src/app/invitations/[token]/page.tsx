@@ -42,7 +42,7 @@ export default async function InvitationPage({ params }: InvitationPageProps) {
     { valid: boolean; email?: string; tenantName?: string } | undefined;
 
   return (
-    <IndustrialAuthShell headline="Accept your invite into a secure flooring operations workspace.">
+    <IndustrialAuthShell headline="Accept your invite into a secure trade operations workspace.">
       <AuthCard
         eyebrow="Invitation acceptance"
         subtitle={

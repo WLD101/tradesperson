@@ -16,8 +16,12 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tradesperson ERP",
-  description: "Flooring operations ERP for lead-to-payment workflows.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://tradesperson.net"),
+  title: {
+    default: "Tradesperson Network",
+    template: "%s | Tradesperson Network",
+  },
+  description: "The digital world for trades. One connected network for every trade, every customer, and every job.",
   icons: {
     icon: "/favicon.png",
     shortcut: "/favicon.png",

@@ -63,7 +63,7 @@ const workflow = [
 
 export function IndustrialAuthShell({
   children,
-  eyebrow = "Operations Edition",
+  eyebrow = "Connected trade platform",
   headline = "Run your trade business from Lead to Payment.",
   subcopy = "CRM, measurements, quotes, scheduling, stock, purchasing, invoices, and profitability in one premium operating system.",
 }: {
@@ -155,7 +155,7 @@ export function IndustrialAuthShell({
             <Image alt="Tradesperson ERP" className="rounded-2xl bg-white shadow-stitch" height={44} src="/brand/tradesperson-erp-logo.png" width={44} />
             <div>
               <p className="font-black">Tradesperson ERP</p>
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">Operations Edition</p>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-700">{eyebrow}</p>
             </div>
           </div>
           <div className="w-full max-w-[540px] pt-20 lg:pt-0">{children}</div>

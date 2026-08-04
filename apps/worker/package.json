@@ -14,10 +14,10 @@
     "@tradesperson/config": "workspace:*",
     "bullmq": "^5.56.1",
     "ioredis": "^5.6.1",
-    "tsx": "^4.20.3",
     "zod": "^4.0.5"
   },
   "devDependencies": {
+    "tsx": "^4.20.3",
     "vitest": "^3.2.4"
   }
 }

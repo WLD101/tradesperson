@@ -2,3 +2,13 @@ packages:
   - apps/*
   - packages/*
   - tests/*
+
+allowBuilds:
+  prisma: true
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@prisma/fetch-engine': true
+  esbuild: true
+  sharp: true
+  msgpackr-extract: true
+  '@scarf/scarf': false

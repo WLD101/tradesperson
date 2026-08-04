@@ -15,7 +15,7 @@
     "test:e2e": "turbo run test:e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "hostinger:web:build": "pnpm db:generate && pnpm --filter @tradesperson/web build",
+    "hostinger:web:build": "pnpm db:generate && pnpm --filter @tradesperson/types build && pnpm --filter @tradesperson/ui build && pnpm --filter @tradesperson/web build",
     "hostinger:web:start": "pnpm --filter @tradesperson/web start",
     "hostinger:api:build": "pnpm db:generate && pnpm --filter @tradesperson/api build",
     "db:generate": "pnpm --filter @tradesperson/db prisma:generate",

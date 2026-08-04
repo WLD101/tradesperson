@@ -4,9 +4,11 @@
   "version": "0.1.0",
   "packageManager": "pnpm@11.18.0",
   "scripts": {
-    "build": "turbo run build",
+    "build": "pnpm hostinger:web:build",
+    "build:all": "turbo run build",
     "dev": "turbo dev",
     "lint": "turbo run lint",
+    "start": "pnpm hostinger:web:start",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:api:full": "pnpm --filter @tradesperson/api test:full",

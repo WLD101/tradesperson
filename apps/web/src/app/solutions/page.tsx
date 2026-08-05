@@ -24,7 +24,6 @@ export default function SolutionsPage() {
             title: solution.eyebrow.replace("Solutions for ", ""),
             body: solution.body,
             href: `/solutions/${solution.slug}`,
-            status: solution.status,
             cta: "View solution",
           }))} columns="xl:grid-cols-4" />
         </div>

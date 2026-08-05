@@ -3,16 +3,25 @@ import Link from "next/link";
 import {
   ArrowRight,
   Bot,
+  CircleEllipsis,
   CheckCircle2,
+  Cpu,
+  CreditCard,
   FileSearch,
   Globe2,
   HandCoins,
+  Handshake,
   LayoutGrid,
-  Network,
+  MessageSquareText,
+  Orbit,
   Package,
+  PanelTop,
   PlugZap,
   Route,
+  ShieldCheck,
   Smartphone,
+  UsersRound,
+  Wrench,
 } from "lucide-react";
 import {
   academyCards,
@@ -41,7 +50,6 @@ import {
   workflowSteps,
 } from "./site-data";
 import type {
-  Availability,
   CampaignRecord,
   FeatureCard,
   IndustryRecord,
@@ -52,7 +60,7 @@ import type {
 import { PublicHeader } from "./public-header";
 import { publicLinks } from "./site-links";
 
-export type { Availability, FeatureCard, IndustryRecord, SolutionRecord, CampaignRecord, PricingPlan, NavItem };
+export type { FeatureCard, IndustryRecord, SolutionRecord, CampaignRecord, PricingPlan, NavItem };
 export {
   academyCards,
   audienceCards,
@@ -93,7 +101,7 @@ export function PublicSiteShell({ children }: { children: React.ReactNode }) {
 export function AnnouncementBar() {
   return (
     <div className="border-b border-emerald-200 bg-emerald-50/80 px-5 py-2 text-center text-xs font-semibold text-emerald-900 lg:px-8">
-      Tradesperson Network brings software, mobile, customers, suppliers, payments, learning, and community together for the wider trades sector.
+      Software, mobile, customers, suppliers, payments, learning, and community connected for the trades.
     </div>
   );
 }
@@ -177,7 +185,6 @@ export function FeatureArticle({ card }: { card: FeatureCard }) {
         <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-950 group-hover:bg-emerald-100 group-hover:text-emerald-800">
           <Icon className="h-6 w-6" />
         </span>
-        {card.status ? <StatusBadge status={card.status} /> : null}
       </div>
       {card.eyebrow ? <p className="mt-6 font-mono text-xs font-black uppercase tracking-[0.14em] text-emerald-700">{card.eyebrow}</p> : null}
       <h3 className="mt-3 text-2xl font-black tracking-tight text-slate-950">{card.title}</h3>
@@ -193,15 +200,7 @@ export function FeatureArticle({ card }: { card: FeatureCard }) {
   return card.href ? <Link href={card.href}>{content}</Link> : content;
 }
 
-export function StatusBadge({ status }: { status: Availability }) {
-  const styles: Record<Availability, string> = {
-    Available: "bg-emerald-100 text-emerald-900 border-emerald-200",
-    Beta: "bg-sky-100 text-sky-900 border-sky-200",
-    "In Development": "bg-amber-100 text-amber-900 border-amber-200",
-    Planned: "bg-slate-100 text-slate-700 border-slate-200",
-  };
-  return <span className={`rounded-full border px-3 py-1 font-mono text-[10px] font-black uppercase tracking-[0.12em] ${styles[status]}`}>{status}</span>;
-}
+
 
 export function UniversalHero() {
   return (
@@ -216,7 +215,7 @@ export function UniversalHero() {
             The digital world for trades.
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-300">
-            Tradesperson Network brings business software, mobile apps, customers, suppliers, AI, automation, payments, learning, and community together to help trade businesses run from first enquiry to final payment.
+            Tradesperson Network connects business software, mobile tools, customers, suppliers, AI, payments, learning, and community helping trade businesses manage work from first enquiry to final payment.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-emerald-400 px-6 text-sm font-black text-slate-950 shadow-stitch-overlay" href="/platform">
@@ -238,32 +237,48 @@ export function UniversalHero() {
 
 export function EcosystemDiagram() {
   const nodes = [
-    ["ERP dashboard", "Lead, jobs, finance, and control"],
-    ["Mobile app", "Field schedules, notes, and completion"],
-    ["Customer portal", "Approvals, documents, and payment"],
-    ["AI assistant", "Drafting, reminders, and summaries"],
-    ["Supplier workflow", "Pricing, orders, and receipts"],
-    ["Payment confirmation", "Invoice and collection context"],
+    { title: "Trade Business", body: "CRM, scheduling, finance, and operational control.", icon: LayoutGrid, position: "left-12 top-12 sm:left-16" },
+    { title: "Tradesperson", body: "Daily jobs, site notes, photos, and completion in the field.", icon: Wrench, position: "right-8 top-16 sm:right-14" },
+    { title: "Customer", body: "Requests, approvals, documents, and payment touchpoints.", icon: UsersRound, position: "left-6 bottom-24 sm:left-10" },
+    { title: "Supplier", body: "Pricing, product data, ordering, and delivery visibility.", icon: Handshake, position: "right-4 bottom-24 sm:right-10" },
+    { title: "ERP", body: "Lead-to-payment command centre for the office team.", icon: PanelTop, position: "left-1/2 top-0 -translate-x-1/2" },
+    { title: "Mobile and AI", body: "Execution, drafting, reminders, and operational insight support.", icon: Cpu, position: "left-1/2 bottom-0 -translate-x-1/2" },
   ] as const;
 
   return (
-    <div className="relative rounded-[2rem] border border-white/10 bg-white/5 p-5 shadow-stitch-overlay">
-      <div className="absolute inset-5 rounded-[1.5rem] bg-[linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:32px_32px] opacity-60" />
-      <div className="relative grid gap-4 sm:grid-cols-2">
-        <div className="flex min-h-56 items-center justify-center rounded-[1.5rem] border border-white/10 bg-[#131b2e] p-8 text-center text-white sm:col-span-2">
-          <div>
-            <Network className="mx-auto h-10 w-10 text-emerald-300" />
-            <p className="mt-3 font-mono text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Connected ecosystem</p>
-            <h2 className="mt-2 text-3xl font-black">One network from first enquiry to final payment</h2>
-          </div>
+    <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.16),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-5 shadow-stitch-overlay">
+      <div className="absolute inset-5 rounded-[1.5rem] bg-[linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:34px_34px] opacity-40" />
+      <div className="relative min-h-[480px] rounded-[1.6rem] border border-white/10 bg-[#131b2e]/85 p-6 sm:min-h-[540px]">
+        <div className="absolute left-1/2 top-1/2 h-[62%] w-[62%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10" />
+        <div className="absolute left-1/2 top-1/2 h-[82%] w-[82%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/5" />
+        <div className="absolute left-1/2 top-1/2 h-[2px] w-[55%] -translate-x-1/2 -translate-y-1/2 bg-white/10" />
+        <div className="absolute left-1/2 top-1/2 h-[55%] w-[2px] -translate-x-1/2 -translate-y-1/2 bg-white/10" />
+        <div className="absolute left-1/2 top-1/2 h-[60%] w-[60%] -translate-x-1/2 -translate-y-1/2">
+          <div className="absolute left-0 top-0 h-px w-full origin-center rotate-45 bg-white/10" />
+          <div className="absolute left-0 top-0 h-px w-full origin-center -rotate-45 bg-white/10" />
         </div>
-        {nodes.map(([title, body], index) => (
-          <div key={title} className="rounded-[1.5rem] border border-white/10 bg-white/95 p-4 text-slate-950">
-            <p className="font-mono text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">0{index + 1}</p>
-            <h3 className="mt-3 font-black">{title}</h3>
-            <p className="mt-1 text-sm text-slate-600">{body}</p>
+
+        <div className="absolute left-1/2 top-1/2 w-[240px] -translate-x-1/2 -translate-y-1/2 rounded-[1.8rem] border border-white/12 bg-[#0f172a] p-7 text-center text-white shadow-stitch-overlay">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+            <Orbit className="h-7 w-7" />
           </div>
-        ))}
+          <p className="mt-4 font-mono text-[11px] font-black uppercase tracking-[0.18em] text-emerald-300">Tradesperson Network</p>
+          <h2 className="mt-3 text-3xl font-black tracking-[-0.04em]">Connected platform for every side of trade work</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-300">Software, people, suppliers, payments, and community aligned in one digital network.</p>
+        </div>
+
+        {nodes.map((node) => {
+          const Icon = node.icon;
+          return (
+            <div key={node.title} className={`absolute w-[180px] rounded-[1.4rem] border border-white/10 bg-white/95 p-4 text-slate-950 shadow-lg shadow-black/10 sm:w-[190px] ${node.position}`}>
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                <Icon className="h-5 w-5" />
+              </div>
+              <h3 className="mt-3 text-base font-black">{node.title}</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{node.body}</p>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -271,21 +286,49 @@ export function EcosystemDiagram() {
 
 export function WorkflowJourney() {
   return (
-    <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-stitch">
-      <div className="flex flex-wrap gap-3">
-        {workflowSteps.map((step, index) => (
-          <div key={step} className="inline-flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 font-mono text-xs font-black text-emerald-900">{index + 1}</span>
-            <span>{step}</span>
-          </div>
-        ))}
+    <div className="grid gap-6 rounded-[2rem] border border-slate-200 bg-white p-6 shadow-stitch lg:grid-cols-[1.15fr_0.85fr]">
+      <div>
+        <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Connected platform overview</p>
+        <h3 className="mt-3 text-3xl font-black tracking-[-0.04em] text-slate-950">Every important relationship in trade work connected in one operating layer.</h3>
+        <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+          Office teams, field teams, customers, suppliers, mobile workflows, payments, and automation share context instead of living in separate tools.
+        </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          {ecosystemLayers.map((layer) => (
+            <span key={layer} className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+              <CircleEllipsis className="h-4 w-4 text-emerald-600" />
+              {layer}
+            </span>
+          ))}
+        </div>
       </div>
-      <div className="mt-6 flex flex-wrap gap-2">
-        {ecosystemLayers.map((layer) => (
-          <span key={layer} className="rounded-full bg-[#0f172a] px-3 py-1.5 font-mono text-[11px] font-black uppercase tracking-[0.14em] text-emerald-300">
-            {layer}
-          </span>
-        ))}
+      <div className="rounded-[1.75rem] bg-[#0f172a] p-5 text-white">
+        <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Network relationships</p>
+        <div className="mt-5 grid gap-3">
+          {[
+            { icon: LayoutGrid, title: "Businesses", body: "Commercial control, scheduling, finance, and oversight." },
+            { icon: Wrench, title: "Tradespeople", body: "Field execution, site context, notes, and completion." },
+            { icon: MessageSquareText, title: "Customers", body: "Requests, approvals, documents, and payment touchpoints." },
+            { icon: Package, title: "Suppliers", body: "Pricing, availability, ordering, and goods movement." },
+            { icon: CreditCard, title: "Payments", body: "Invoice collection and billing pathways tied to real work." },
+            { icon: ShieldCheck, title: "Community", body: "Trust, support, learning, and long-term trade relationships." },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <div key={item.title} className="rounded-2xl border border-white/10 bg-white/6 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-black">{item.title}</p>
+                    <p className="text-sm text-slate-300">{item.body}</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -316,7 +359,6 @@ export function LinkCardGrid({ items, basePath }: { items: IndustryRecord[] | So
         <Link key={item.slug} className="rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-stitch transition hover:-translate-y-1 hover:border-emerald-300 hover:shadow-stitch-overlay" href={`${basePath}/${item.slug}`}>
           <div className="flex items-start justify-between gap-3">
             <h2 className="text-xl font-black">{"title" in item ? item.title : item.name}</h2>
-            <StatusBadge status={item.status} />
           </div>
           <p className="mt-4 text-sm leading-6 text-slate-600">{"body" in item ? item.body : item.workflow}</p>
           <p className="mt-5 text-sm font-black text-emerald-800">View page</p>
@@ -354,7 +396,6 @@ export function PricingCards() {
               <h3 className="mt-3 text-2xl font-black">{plan.priceLabel}</h3>
               <p className="mt-2 text-sm text-slate-500">{plan.billingNote}</p>
             </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-slate-700">{plan.status}</span>
           </div>
           <p className="mt-5 text-sm font-semibold text-slate-700">{plan.idealFor}</p>
           <div className="mt-5 space-y-3">
@@ -488,17 +529,17 @@ export function ContactForm({ mode }: { mode: "contact" | "demo" }) {
 }
 
 export function IndustryTemplate({ industry }: { industry: IndustryRecord }) {
-  const isConfigured = industry.status === "Available";
+  const isConfigured = industry.slug === "flooring";
   const cards: FeatureCard[] = [
-    { title: "Challenges", body: industry.challenges.join(" • "), icon: FileSearch, status: industry.status },
-    { title: "Workflow", body: industry.workflow, icon: Route, status: industry.status },
-    { title: "Modules", body: "CRM, customers, sites, estimates, quotes, jobs, scheduling, materials, purchasing, invoices, and reporting.", icon: LayoutGrid, status: "Available" },
-    { title: "Mobile", body: "Field schedules, site information, photos, notes, checklists, and completion actions support the wider mobile direction.", icon: Smartphone, status: "Beta" },
-    { title: "Customer experience", body: "Requests, approvals, documents, and payment routes expand the customer side of the trade workflow.", icon: Globe2, status: "In Development" },
-    { title: "Materials or assets", body: isConfigured ? "Configured to support the industry’s product, supplier, and operational records." : "General material, asset, or supplier patterns apply while trade-specific templates are validated.", icon: Package, status: isConfigured ? "Available" : "Beta" },
-    { title: "Automation", body: "AI-supported qualification, drafting, reminders, and summaries remain human-approved and availability-labelled.", icon: Bot, status: "In Development" },
-    { title: "Integrations", body: "Accounting, payments, calendar, maps, storage, and APIs sit in the broader integration roadmap.", icon: PlugZap, status: "In Development" },
-    { title: "Outcomes", body: "Respond faster, reduce admin, organise work clearly, improve customer communication, and understand profitability.", icon: HandCoins, status: "Available" },
+    { title: "Challenges", body: industry.challenges.join(" • "), icon: FileSearch },
+    { title: "Workflow", body: industry.workflow, icon: Route },
+    { title: "Modules", body: "CRM, customers, sites, estimates, quotes, jobs, scheduling, materials, purchasing, invoices, and reporting.", icon: LayoutGrid },
+    { title: "Mobile", body: "Field schedules, site information, photos, notes, checklists, and completion actions support the wider mobile direction.", icon: Smartphone },
+    { title: "Customer experience", body: "Requests, approvals, documents, and payment routes expand the customer side of the trade workflow.", icon: Globe2 },
+    { title: "Materials or assets", body: isConfigured ? "Configured to support the industry’s product, supplier, and operational records." : "General material, asset, or supplier patterns apply while trade-specific templates are built in.", icon: Package },
+    { title: "Automation", body: "AI-supported qualification, drafting, reminders, and summaries remain human-approved.", icon: Bot },
+    { title: "Integrations", body: "Accounting, payments, calendar, maps, storage, and APIs connect the ecosystem.", icon: PlugZap },
+    { title: "Outcomes", body: "Respond faster, reduce admin, organise work clearly, improve customer communication, and understand profitability.", icon: HandCoins },
   ];
 
   return (
@@ -513,7 +554,6 @@ export function IndustryTemplate({ industry }: { industry: IndustryRecord }) {
       <section className="px-5 pb-8 lg:px-8">
         <div className="mx-auto max-w-7xl rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-stitch">
           <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge status={industry.status} />
             <p className="text-sm font-semibold text-slate-600">
               {isConfigured
                 ? `${industry.name} is the first deeply configured industry path available in the current ERP foundation.`
@@ -551,7 +591,6 @@ export function SolutionTemplate({ solution }: { solution: SolutionRecord }) {
       <section className="px-5 pb-8 lg:px-8">
         <div className="mx-auto max-w-7xl rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-stitch">
           <div className="flex flex-wrap items-center gap-3">
-            <StatusBadge status={solution.status} />
             <p className="text-sm font-semibold text-slate-600">{solution.audience}</p>
           </div>
         </div>
@@ -567,8 +606,8 @@ export function SolutionTemplate({ solution }: { solution: SolutionRecord }) {
 }
 
 export function CampaignTemplate({ campaign }: { campaign: CampaignRecord }) {
-  const painCards = campaign.painPoints.map((point) => ({ title: point, body: "A connected trade workflow removes this pressure by keeping context attached to the job.", status: "Available" as Availability }));
-  const benefitCards = campaign.benefits.map((point) => ({ title: point, body: "This campaign route connects into the broader product story without inventing a separate system.", status: "Available" as Availability }));
+  const painCards = campaign.painPoints.map((point) => ({ title: point, body: "A connected trade workflow removes this pressure by keeping context attached to the job." }));
+  const benefitCards = campaign.benefits.map((point) => ({ title: point, body: "This campaign route connects into the broader product story without inventing a separate system." }));
 
   return (
     <>

@@ -54,18 +54,23 @@ function trackRuntimeIssues(page: import("@playwright/test").Page) {
 }
 
 test.describe("Public website", () => {
-  test("renders the universal homepage, navigation, and primary public actions", async ({ page }) => {
+  test("renders the redesigned homepage, navigation, and primary public actions", async ({ page }) => {
     const runtimeIssues = trackRuntimeIssues(page);
 
     await page.goto("/");
 
     await expect(page.getByRole("heading", { name: "The digital world for trades." })).toBeVisible();
+    await expect(page.getByText("Digital ecosystem for trades")).toBeVisible();
+    await expect(page.getByText("A connected product family, not a single narrow app.")).toBeVisible();
+    await expect(page.getByText("Every important relationship in trade work connected in one operating layer.")).toBeVisible();
+
     const publicNav = page.getByLabel("Public navigation");
     await expect(publicNav.getByRole("button", { name: "Platform" })).toBeVisible();
     await expect(publicNav.getByRole("button", { name: "Products" })).toBeVisible();
     await expect(publicNav.getByRole("button", { name: "Solutions" })).toBeVisible();
     await expect(publicNav.getByRole("link", { name: "Industries" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Sign In" }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Book a Demo" }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "Start Workspace" }).first()).toBeVisible();
 
     await publicNav.getByRole("button", { name: "Platform" }).hover();
@@ -151,6 +156,7 @@ test.describe("Public website", () => {
 
     await page.getByRole("button", { name: "Open menu" }).click();
     const mobileHeader = page.locator("header");
+    await expect(mobileHeader.getByText("Explore the network across platform, products, industries, community, and commercial entry points.")).toBeVisible();
     await expect(mobileHeader.getByRole("link", { name: "Solutions Audience-specific journeys and use cases." })).toBeVisible();
     await expect(mobileHeader.getByRole("link", { name: "Start Workspace" })).toBeVisible();
     await Promise.all([

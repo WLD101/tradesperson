@@ -3,10 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Menu, X } from "lucide-react";
+import { ArrowRight, ChevronDown, Menu, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { megaMenuSections, navItems } from "./site-data";
-import type { Availability } from "./site-data";
 import { publicLinks } from "./site-links";
 
 type HeaderMenuKey = keyof typeof megaMenuSections | null;
@@ -31,17 +30,19 @@ export function PublicHeader() {
   }, [openMobile]);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-800/10 bg-[#0f172a]/95 text-white backdrop-blur">
-      <div className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-4 px-5 lg:px-8">
-        <Link className="flex items-center gap-3" href="/" aria-label="Tradesperson Network home">
-          <Image alt="Tradesperson Network logo" className="rounded-xl bg-white" height={42} src="/brand/tradesperson-erp-logo.png" width={42} />
-          <div>
-            <p className="text-base font-black tracking-tight">Tradesperson Network</p>
-            <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">The digital world for trades</p>
+    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-[#0f172a]/96 text-white backdrop-blur">
+      <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between gap-6 px-5 lg:px-8">
+        <Link className="flex min-w-0 items-center gap-3.5" href="/" aria-label="Tradesperson Network home">
+          <Image alt="Tradesperson Network logo" className="rounded-2xl bg-white shadow-sm" height={48} src="/brand/tradesperson-erp-logo.png" width={48} />
+          <div className="min-w-0">
+            <p className="truncate text-lg font-black tracking-[-0.03em] text-white">Tradesperson Network</p>
+            <p className="mt-0.5 hidden truncate font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300 md:block">
+              Digital ecosystem for trades
+            </p>
           </div>
         </Link>
 
-        <nav className="hidden items-center gap-1 xl:flex" aria-label="Public navigation">
+        <nav className="hidden flex-1 items-center justify-center gap-1 xl:flex" aria-label="Public navigation">
           {navItems.map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
             const megaKey = getMegaKey(item.href);
@@ -53,8 +54,8 @@ export function PublicHeader() {
                 onMouseLeave={() => setOpenMega((current) => (current === megaKey ? null : current))}
               >
                 <button
-                  className={`inline-flex items-center gap-1 rounded-full px-3 py-2 text-sm font-bold transition ${
-                    active ? "bg-white/12 text-white" : "text-white/75 hover:bg-white/10 hover:text-white"
+                  className={`inline-flex items-center gap-1 rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                    active ? "bg-white/12 text-white" : "text-white/72 hover:bg-white/10 hover:text-white"
                   }`}
                   onFocus={() => setOpenMega(megaKey)}
                   onClick={() => setOpenMega((current) => (current === megaKey ? null : megaKey))}
@@ -68,8 +69,8 @@ export function PublicHeader() {
             ) : (
               <Link
                 key={item.href}
-                className={`rounded-full px-3 py-2 text-sm font-bold transition ${
-                  active ? "bg-white/12 text-white" : "text-white/75 hover:bg-white/10 hover:text-white"
+                className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+                  active ? "bg-white/12 text-white" : "text-white/72 hover:bg-white/10 hover:text-white"
                 }`}
                 href={item.href}
               >
@@ -79,16 +80,19 @@ export function PublicHeader() {
           })}
         </nav>
 
-        <div className="hidden items-center gap-3 md:flex">
-          <Link className="text-sm font-bold text-white/80 hover:text-white" href={publicLinks.signIn}>Sign In</Link>
-          <Link className="rounded-xl border border-white/20 px-4 py-2 text-sm font-black text-white hover:bg-white/10" href="/book-demo">Book a Demo</Link>
-          <Link className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-slate-950 hover:bg-emerald-300" href={publicLinks.startWorkspace}>Start Workspace</Link>
+        <div className="hidden items-center gap-2 md:flex">
+          <Link className="rounded-xl px-3 py-2 text-sm font-semibold text-white/80 transition hover:bg-white/5 hover:text-white" href={publicLinks.signIn}>Sign In</Link>
+          <Link className="rounded-xl border border-white/20 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/10" href="/book-demo">Book a Demo</Link>
+          <Link className="inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-black text-slate-950 transition hover:bg-emerald-300" href={publicLinks.startWorkspace}>
+            Start Workspace
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
 
         <button
           aria-expanded={openMobile}
           aria-label="Open menu"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/15 xl:hidden"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/15 xl:hidden"
           onClick={() => setOpenMobile((value) => !value)}
           type="button"
         >
@@ -98,18 +102,23 @@ export function PublicHeader() {
 
       {openMobile ? (
         <div className="border-t border-white/10 bg-[#0f172a] px-5 py-5 xl:hidden">
-          <div className="grid gap-2">
+          <div className="mx-auto max-w-7xl">
+            <p className="mb-4 max-w-sm text-sm leading-6 text-slate-300">
+              Explore the network across platform, products, industries, community, and commercial entry points.
+            </p>
+            <div className="grid gap-2">
             {navItems.map((item) => (
-              <Link key={item.href} className="rounded-2xl border border-white/10 px-4 py-4 text-sm font-bold hover:bg-white/5" href={item.href}>
+              <Link key={item.href} className="rounded-2xl border border-white/10 px-4 py-4 text-sm font-bold transition hover:bg-white/5" href={item.href}>
                 <span className="block">{item.label}</span>
                 {item.description ? <span className="mt-1 block text-xs font-medium text-white/65">{item.description}</span> : null}
               </Link>
             ))}
           </div>
-          <div className="mt-4 grid gap-2 border-t border-white/10 pt-4">
-            <Link className="rounded-2xl border border-white/10 px-4 py-4 text-sm font-bold" href={publicLinks.signIn}>Sign In</Link>
-            <Link className="rounded-2xl border border-white/10 px-4 py-4 text-sm font-bold" href="/book-demo">Book a Demo</Link>
-            <Link className="rounded-2xl bg-emerald-400 px-4 py-4 text-sm font-black text-slate-950" href={publicLinks.startWorkspace}>Start Workspace</Link>
+            <div className="mt-4 grid gap-2 border-t border-white/10 pt-4">
+              <Link className="rounded-2xl border border-white/10 px-4 py-4 text-sm font-bold" href={publicLinks.signIn}>Sign In</Link>
+              <Link className="rounded-2xl border border-white/10 px-4 py-4 text-sm font-bold" href="/book-demo">Book a Demo</Link>
+              <Link className="rounded-2xl bg-emerald-400 px-4 py-4 text-sm font-black text-slate-950" href={publicLinks.startWorkspace}>Start Workspace</Link>
+            </div>
           </div>
         </div>
       ) : null}
@@ -131,26 +140,13 @@ function MegaMenu({ menuKey }: { menuKey: Exclude<HeaderMenuKey, null> }) {
       <div className="grid grid-cols-2 gap-3">
         {cards.map((item) => (
           <Link key={item.href + item.label} className="rounded-2xl border border-slate-200 p-4 transition hover:border-emerald-300 hover:bg-emerald-50/40" href={item.href}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-black">{item.label}</p>
-                <p className="mt-1 text-sm leading-6 text-slate-600">{item.description}</p>
-              </div>
-              {"status" in item && item.status ? <LocalStatusBadge status={item.status as Availability} /> : null}
+            <div>
+              <p className="font-black">{item.label}</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">{item.description}</p>
             </div>
           </Link>
         ))}
       </div>
     </div>
   );
-}
-
-function LocalStatusBadge({ status }: { status: Availability }) {
-  const styles: Record<Availability, string> = {
-    Available: "bg-emerald-100 text-emerald-900 border-emerald-200",
-    Beta: "bg-sky-100 text-sky-900 border-sky-200",
-    "In Development": "bg-amber-100 text-amber-900 border-amber-200",
-    Planned: "bg-slate-100 text-slate-700 border-slate-200",
-  };
-  return <span className={`rounded-full border px-3 py-1 font-mono text-[10px] font-black uppercase tracking-[0.12em] ${styles[status]}`}>{status}</span>;
 }

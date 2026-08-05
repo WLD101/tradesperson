@@ -101,7 +101,8 @@ export function PublicSiteShell({ children }: { children: React.ReactNode }) {
 export function AnnouncementBar() {
   return (
     <div className="border-b border-emerald-200 bg-emerald-50/80 px-5 py-2 text-center text-xs font-semibold text-emerald-900 lg:px-8">
-      Software, mobile, customers, suppliers, payments, learning, and community connected for the trades.
+      Software, mobile, customers, suppliers, payments, learning, and community—connected for the trades.{" "}
+      <Link href="/platform" className="font-bold underline hover:text-emerald-700">Explore the Network →</Link>
     </div>
   );
 }
@@ -237,48 +238,47 @@ export function UniversalHero() {
 
 export function EcosystemDiagram() {
   const nodes = [
-    { title: "Trade Business", body: "CRM, scheduling, finance, and operational control.", icon: LayoutGrid, position: "left-12 top-12 sm:left-16" },
-    { title: "Tradesperson", body: "Daily jobs, site notes, photos, and completion in the field.", icon: Wrench, position: "right-8 top-16 sm:right-14" },
-    { title: "Customer", body: "Requests, approvals, documents, and payment touchpoints.", icon: UsersRound, position: "left-6 bottom-24 sm:left-10" },
-    { title: "Supplier", body: "Pricing, product data, ordering, and delivery visibility.", icon: Handshake, position: "right-4 bottom-24 sm:right-10" },
-    { title: "ERP", body: "Lead-to-payment command centre for the office team.", icon: PanelTop, position: "left-1/2 top-0 -translate-x-1/2" },
-    { title: "Mobile and AI", body: "Execution, drafting, reminders, and operational insight support.", icon: Cpu, position: "left-1/2 bottom-0 -translate-x-1/2" },
+    { title: "Trade Business", body: "CRM, scheduling, finance, and operational control.", icon: LayoutGrid, col: "md:col-start-1 md:row-start-1" },
+    { title: "ERP", body: "Lead-to-payment command centre for the office team.", icon: PanelTop, col: "md:col-start-2 md:row-start-1" },
+    { title: "Tradesperson", body: "Daily jobs, site notes, photos, and completion in the field.", icon: Wrench, col: "md:col-start-3 md:row-start-1" },
+    { title: "Customer", body: "Requests, approvals, documents, and payment touchpoints.", icon: UsersRound, col: "md:col-start-1 md:row-start-3" },
+    { title: "Mobile & AI", body: "Execution, drafting, reminders, and operational insight support.", icon: Cpu, col: "md:col-start-2 md:row-start-3" },
+    { title: "Supplier", body: "Pricing, product data, ordering, and delivery visibility.", icon: Handshake, col: "md:col-start-3 md:row-start-3" },
   ] as const;
 
   return (
-    <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.16),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] p-5 shadow-stitch-overlay">
-      <div className="absolute inset-5 rounded-[1.5rem] bg-[linear-gradient(to_right,rgba(255,255,255,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[size:34px_34px] opacity-40" />
-      <div className="relative min-h-[480px] rounded-[1.6rem] border border-white/10 bg-[#131b2e]/85 p-6 sm:min-h-[540px]">
-        <div className="absolute left-1/2 top-1/2 h-[62%] w-[62%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/10" />
-        <div className="absolute left-1/2 top-1/2 h-[82%] w-[82%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/5" />
-        <div className="absolute left-1/2 top-1/2 h-[2px] w-[55%] -translate-x-1/2 -translate-y-1/2 bg-white/10" />
-        <div className="absolute left-1/2 top-1/2 h-[55%] w-[2px] -translate-x-1/2 -translate-y-1/2 bg-white/10" />
-        <div className="absolute left-1/2 top-1/2 h-[60%] w-[60%] -translate-x-1/2 -translate-y-1/2">
-          <div className="absolute left-0 top-0 h-px w-full origin-center rotate-45 bg-white/10" />
-          <div className="absolute left-0 top-0 h-px w-full origin-center -rotate-45 bg-white/10" />
-        </div>
+    <div className="relative rounded-[2rem] border border-white/10 bg-[#131b2e]/85 p-5 shadow-stitch-overlay sm:p-8">
+      {/* Background SVG lines - decorative only on desktop */}
+      <div className="pointer-events-none absolute inset-0 hidden md:block">
+        <svg className="h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+          <path d="M50,50 L16.6,16.6 M50,50 L50,16.6 M50,50 L83.3,16.6 M50,50 L16.6,83.3 M50,50 L50,83.3 M50,50 L83.3,83.3" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
+        </svg>
+      </div>
 
-        <div className="absolute left-1/2 top-1/2 w-[240px] -translate-x-1/2 -translate-y-1/2 rounded-[1.8rem] border border-white/12 bg-[#0f172a] p-7 text-center text-white shadow-stitch-overlay">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
-            <Orbit className="h-7 w-7" />
-          </div>
-          <p className="mt-4 font-mono text-[11px] font-black uppercase tracking-[0.18em] text-emerald-300">Tradesperson Network</p>
-          <h2 className="mt-3 text-3xl font-black tracking-[-0.04em]">Connected platform for every side of trade work</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-300">Software, people, suppliers, payments, and community aligned in one digital network.</p>
-        </div>
-
+      <div className="relative z-10 grid grid-cols-1 gap-4 md:grid-cols-3 md:grid-rows-3 md:gap-6">
         {nodes.map((node) => {
           const Icon = node.icon;
           return (
-            <div key={node.title} className={`absolute w-[180px] rounded-[1.4rem] border border-white/10 bg-white/95 p-4 text-slate-950 shadow-lg shadow-black/10 sm:w-[190px] ${node.position}`}>
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+            <div key={node.title} className={`rounded-[1.4rem] border border-white/10 bg-white/95 p-4 text-slate-950 shadow-lg ${node.col}`}>
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
                 <Icon className="h-5 w-5" />
               </div>
-              <h3 className="mt-3 text-base font-black">{node.title}</h3>
-              <p className="mt-1 text-sm leading-6 text-slate-600">{node.body}</p>
+              <h3 className="text-[15px] font-black">{node.title}</h3>
+              <p className="mt-1 text-xs leading-5 text-slate-600">{node.body}</p>
             </div>
           );
         })}
+
+        {/* Central Node */}
+        <div className="flex items-center justify-center py-2 md:col-start-2 md:row-start-2 md:py-0">
+          <div className="w-full rounded-[1.8rem] border border-white/12 bg-[#0f172a] p-5 text-center text-white shadow-stitch-overlay">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-300">
+              <Orbit className="h-6 w-6" />
+            </div>
+            <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-emerald-300">Tradesperson Network</p>
+            <p className="mt-2 text-sm font-bold leading-5">Connected Platform</p>
+          </div>
+        </div>
       </div>
     </div>
   );

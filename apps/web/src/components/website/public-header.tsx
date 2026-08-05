@@ -36,9 +36,6 @@ export function PublicHeader() {
           <Image alt="Tradesperson Network logo" className="rounded-2xl bg-white shadow-sm" height={48} src="/brand/tradesperson-erp-logo.png" width={48} />
           <div className="min-w-0">
             <p className="truncate text-lg font-black tracking-[-0.03em] text-white">Tradesperson Network</p>
-            <p className="mt-0.5 hidden truncate font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300 md:block">
-              Digital ecosystem for trades
-            </p>
           </div>
         </Link>
 

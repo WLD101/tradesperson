@@ -28,14 +28,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "pnpm --filter @tradesperson/api dev",
-      url: "http://localhost:4000/api/v1/health",
-      reuseExistingServer: !process.env.CI,
-      timeout: 120000,
-      cwd: "../..",
-    },
-    {
-      command: "pnpm --filter @tradesperson/web dev",
+      command: "pnpm --filter @tradesperson/web start",
       url: "http://localhost:3000",
       reuseExistingServer: !process.env.CI,
       timeout: 120000,

@@ -60,7 +60,6 @@ test.describe("Public website", () => {
     await page.goto("/");
 
     await expect(page.getByRole("heading", { name: "The digital world for trades." })).toBeVisible();
-    await expect(page.getByText("Digital ecosystem for trades")).toBeVisible();
     await expect(page.getByText("A connected product family, not a single narrow app.")).toBeVisible();
     await expect(page.getByText("Every important relationship in trade work connected in one operating layer.")).toBeVisible();
 

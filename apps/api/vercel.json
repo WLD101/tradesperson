@@ -3,15 +3,10 @@
   "framework": null,
   "installCommand": "corepack enable && corepack prepare pnpm@10.14.0 --activate && pnpm install --frozen-lockfile",
   "buildCommand": "pnpm vercel-build",
-  "functions": {
-    "src/vercel.ts": {
-      "runtime": "nodejs22.x"
-    }
-  },
   "rewrites": [
     {
-      "source": "/(.*)",
-      "destination": "/src/vercel.ts"
+      "source": "/api/:path*",
+      "destination": "/api"
     }
   ]
 }

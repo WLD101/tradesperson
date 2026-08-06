@@ -20,6 +20,7 @@
     "hostinger:web:start": "pnpm --filter @tradesperson/web start",
     "vercel:web:build": "pnpm db:generate && pnpm --filter @tradesperson/types build && pnpm --filter @tradesperson/ui build && pnpm --filter @tradesperson/web build",
     "hostinger:api:build": "pnpm db:generate && pnpm --filter @tradesperson/api build",
+    "vercel:api:prepare": "pnpm db:generate && pnpm --filter @tradesperson/types build && pnpm --filter @tradesperson/db build && pnpm --filter @tradesperson/auth build && pnpm --filter @tradesperson/config build",
     "db:generate": "pnpm --filter @tradesperson/db prisma:generate",
     "db:migrate": "pnpm --filter @tradesperson/db prisma:migrate",
     "db:migrate:deploy": "pnpm --filter @tradesperson/db prisma:migrate:deploy",

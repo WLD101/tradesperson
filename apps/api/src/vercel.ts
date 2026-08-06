@@ -2,19 +2,21 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { ValidationPipe, VersioningType } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
+import { ExpressAdapter } from "@nestjs/platform-express";
+import express, { Request, Response } from "express";
 import { AppModule } from "./modules/app.module";
 import { ApiExceptionFilter } from "./shared/api-exception.filter";
 import { ResponseEnvelopeInterceptor } from "./shared/response-envelope.interceptor";
 import { RequestContextMiddleware } from "./shared/request-context.middleware";
 import { loadEnv } from "../../../packages/config/src";
-import { Express } from "express";
 
-let cachedServer: Express;
+let cachedServer: express.Application;
 
-async function bootstrapServer(): Promise<Express> {
+async function bootstrapServer(): Promise<express.Application> {
   if (!cachedServer) {
     loadEnv();
-    const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
+    const expressApp = express();
+    const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp), { bufferLogs: true, rawBody: true });
 
     app.enableCors({
       origin: process.env.WEB_URL,
@@ -40,12 +42,12 @@ async function bootstrapServer(): Promise<Express> {
     });
 
     await app.init();
-    cachedServer = app.getHttpAdapter().getInstance();
+    cachedServer = expressApp;
   }
   return cachedServer;
 }
 
-export default async function handler(req: any, res: any) {
+export default async function handler(req: Request, res: Response) {
   const server = await bootstrapServer();
   return server(req, res);
 }

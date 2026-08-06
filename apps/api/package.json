@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "vercel-build": "pnpm --filter @tradesperson/db generate && pnpm --filter @tradesperson/types build && pnpm --filter @tradesperson/db build && pnpm --filter @tradesperson/auth build && pnpm --filter @tradesperson/config build && pnpm --filter @tradesperson/api build",
     "dev": "nest start --watch --entryFile apps/api/src/main --sourceRoot . --env-file ../../.env",
     "start": "node dist/apps/api/src/main.js",
     "lint": "eslint src --max-warnings=0",

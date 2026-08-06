@@ -1,15 +1,17 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "src/vercel.ts",
-      "use": "@vercel/node"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "corepack enable && corepack prepare pnpm@10.14.0 --activate && pnpm install --frozen-lockfile",
+  "buildCommand": "pnpm vercel-build",
+  "functions": {
+    "src/vercel.ts": {
+      "runtime": "nodejs22.x"
     }
-  ],
-  "routes": [
+  },
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "src/vercel.ts"
+      "source": "/(.*)",
+      "destination": "/src/vercel.ts"
     }
   ]
 }

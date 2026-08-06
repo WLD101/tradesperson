@@ -1,21 +1,20 @@
 ﻿{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "version": 2,
-  "installCommand": "corepack enable && corepack prepare pnpm@10.14.0 --activate && pnpm install --frozen-lockfile && pnpm --dir ../.. vercel:api:prepare",
-  "builds": [
-    {
-      "src": "api/index.ts",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/index.ts"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/index.ts"
-    }
-  ]
+    "$schema":  "https://openapi.vercel.sh/vercel.json",
+    "version":  2,
+    "builds":  [
+                   {
+                       "src":  "api/index.ts",
+                       "use":  "@vercel/node"
+                   }
+               ],
+    "routes":  [
+                   {
+                       "src":  "/api/(.*)",
+                       "dest":  "/api/index.ts"
+                   },
+                   {
+                       "src":  "/(.*)",
+                       "dest":  "/api/index.ts"
+                   }
+               ]
 }

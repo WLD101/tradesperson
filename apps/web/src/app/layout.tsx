@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     default: "Tradesperson Network",
     template: "%s | Tradesperson Network",
   },
-  description: "The digital world for trades. One connected network for every trade, every customer, and every job.",
+  description: "One connected network for every trade, every customer, and every job.",
   icons: {
     icon: "/favicon.png",
     shortcut: "/favicon.png",

@@ -9,16 +9,16 @@ export const metadata: Metadata = buildPageMetadata({
 });
 
 const aiCards = [
-  { title: "AI receptionist", body: "Missed-call support and front-door lead capture are part of the communications roadmap.", status: "Planned" as const },
-  { title: "Lead qualification", body: "Support faster response and structured follow-up with human oversight.", status: "In Development" as const },
-  { title: "Estimate assistance", body: "Help estimators draft structured commercial outputs faster.", status: "In Development" as const },
-  { title: "Quote drafting", body: "Use AI to reduce repetitive writing while keeping approval in human hands.", status: "In Development" as const },
-  { title: "Customer messaging", body: "Support reminders and clearer communication without losing control of tone and timing.", status: "Planned" as const },
-  { title: "Scheduling support", body: "Assist planners with trade-off visibility and job coordination.", status: "Planned" as const },
-  { title: "Job summaries", body: "Condense notes, activity, and handover information for better office visibility.", status: "In Development" as const },
-  { title: "Invoice reminders", body: "Help collections and customer follow-up stay consistent.", status: "Planned" as const },
-  { title: "Operational insights", body: "Surface patterns around workload, response speed, and performance.", status: "In Development" as const },
-  { title: "Privacy and approval", body: "AI routes remain availability-labelled and human-approved rather than overstated as autonomous.", status: "Available" as const },
+  { title: "AI receptionist", body: "Missed-call support and front-door lead capture are part of the communications roadmap." },
+  { title: "Lead qualification", body: "Support faster response and structured follow-up with human oversight." },
+  { title: "Estimate assistance", body: "Help estimators draft structured commercial outputs faster." },
+  { title: "Quote drafting", body: "Use AI to reduce repetitive writing while keeping approval in human hands." },
+  { title: "Customer messaging", body: "Support reminders and clearer communication without losing control of tone and timing." },
+  { title: "Scheduling support", body: "Assist planners with trade-off visibility and job coordination." },
+  { title: "Job summaries", body: "Condense notes, activity, and handover information for better office visibility." },
+  { title: "Invoice reminders", body: "Help collections and customer follow-up stay consistent." },
+  { title: "Operational insights", body: "Surface patterns around workload, response speed, and performance." },
+  { title: "Privacy and approval", body: "AI routes remain availability-labelled and human-approved rather than overstated as autonomous." },
 ];
 
 export default function AiPage() {

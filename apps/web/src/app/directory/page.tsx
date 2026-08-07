@@ -9,10 +9,10 @@ export const metadata: Metadata = buildPageMetadata({
 });
 
 const cards = [
-  { title: "Professional profiles", body: "Support verified identity, trade categories, service areas, and capability context.", status: "Planned" as const },
-  { title: "Customer requests", body: "Connect demand generation with profile visibility and quote opportunity flow.", status: "Planned" as const },
-  { title: "Reviews and trust", body: "Bring reputation and proof closer to the wider customer journey.", status: "Planned" as const },
-  { title: "Local discovery", body: "Map regional supply and service availability across the wider trade network.", status: "Planned" as const },
+  { title: "Professional profiles", body: "Support verified identity, trade categories, service areas, and capability context." },
+  { title: "Customer requests", body: "Connect demand generation with profile visibility and quote opportunity flow." },
+  { title: "Reviews and trust", body: "Bring reputation and proof closer to the wider customer journey." },
+  { title: "Local discovery", body: "Map regional supply and service availability across the wider trade network." },
 ];
 
 export default function DirectoryPage() {

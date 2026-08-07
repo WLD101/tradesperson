@@ -13,9 +13,10 @@ export default function ProductsPage() {
   return (
     <PublicSiteShell>
       <PageHero
-        eyebrow="Products"
-        title="A product family for every side of trade work."
-        body="Tradesperson Network is a connected ecosystem, not a one-industry application. Product routes show what is available today and what remains in development or planned."
+        eyebrow="Platform products"
+        title="Software, mobile, payments, AI, and connectivity for trade businesses."
+        body="Tradesperson Network is a connected ecosystem, not a one-industry application. Product routes show the capabilities of the platform."
+        cta={{ label: "Start your workspace", href: publicLinks.startWorkspace }}
       />
       <section className="px-5 pb-20 lg:px-8">
         <div className="mx-auto max-w-7xl">

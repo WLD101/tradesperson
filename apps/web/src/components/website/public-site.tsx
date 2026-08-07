@@ -113,9 +113,6 @@ function logoBlock(showTagline = true) {
       <Image alt="Tradesperson Network logo" className="rounded-xl bg-white" height={42} src="/brand/tradesperson-erp-logo.png" width={42} />
       <div>
         <p className="text-base font-black tracking-tight">Tradesperson Network</p>
-        {showTagline ? (
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">The digital world for trades</p>
-        ) : null}
       </div>
     </>
   );

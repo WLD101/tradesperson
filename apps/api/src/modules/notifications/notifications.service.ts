@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../services/prisma.service';
-import { SendGridProvider } from './providers/sendgrid.provider';
+import { ResendProvider } from './providers/resend.provider';
 import { TwilioProvider } from './providers/twilio.provider';
 import { NotificationChannel, NotificationStatus } from '@prisma/client';
 import { loadEnv } from '@tradesperson/config';
@@ -13,7 +13,7 @@ export class NotificationsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sendgrid: SendGridProvider,
+    private readonly resend: ResendProvider,
     private readonly twilio: TwilioProvider,
   ) {}
 
@@ -89,7 +89,7 @@ export class NotificationsService {
     let errorMessage: string | null = null;
     
     try {
-      await this.sendgrid.sendEmail(recipient, subject, html);
+      await this.resend.sendEmail(recipient, subject, html);
       status = NotificationStatus.SENT;
     } catch (error: any) {
       status = NotificationStatus.FAILED;

@@ -7,17 +7,13 @@ import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class BillingService {
-  private stripe: Stripe;
+  private stripe: Stripe | null = null;
 
   constructor(
     private prisma: PrismaService,
     private events: EventsService,
     private notifications: NotificationsService,
-  ) {
-    this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
-      apiVersion: '2026-06-24.dahlia' as any,
-    });
-  }
+  ) {}
 
   async createSubscriptionCheckout(tenantId: string, dto: CreateSubscriptionCheckoutDto) {
     const tenant = await this.prisma.client.tenant.findUnique({
@@ -29,7 +25,8 @@ export class BillingService {
     let stripeCustomerId = tenant.stripeCustomerId;
 
     if (!stripeCustomerId) {
-      const customer = await this.stripe.customers.create({
+      const stripe = this.getStripeClient();
+      const customer = await stripe.customers.create({
         name: tenant.name,
         metadata: { tenantId },
       });
@@ -40,7 +37,8 @@ export class BillingService {
       });
     }
 
-    const session = await this.stripe.checkout.sessions.create({
+    const stripe = this.getStripeClient();
+    const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
       mode: 'subscription',
       payment_method_types: ['card'],
@@ -55,9 +53,9 @@ export class BillingService {
 
   async createPublicTrialCheckout(dto: CreatePublicTrialCheckoutDto) {
     const priceId = this.resolveTrialPriceId(dto.packageKey);
-    this.ensureStripeConfigured();
+    const stripe = this.getStripeClient();
 
-    const session = await this.stripe.checkout.sessions.create({
+    const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       customer_email: dto.email,
       payment_method_collection: 'always',
@@ -99,7 +97,8 @@ export class BillingService {
       throw new BadRequestException('No Stripe customer associated with this tenant');
     }
 
-    const session = await this.stripe.billingPortal.sessions.create({
+    const stripe = this.getStripeClient();
+    const session = await stripe.billingPortal.sessions.create({
       customer: tenant.stripeCustomerId,
       return_url: returnUrl,
     });
@@ -116,7 +115,8 @@ export class BillingService {
     if (!invoice) throw new NotFoundException('Invoice not found');
     if (invoice.status === 'PAID') throw new BadRequestException('Invoice is already paid');
 
-    const session = await this.stripe.checkout.sessions.create({
+    const stripe = this.getStripeClient();
+    const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
       line_items: [
@@ -147,10 +147,11 @@ export class BillingService {
 
   async handleWebhookEvent(signature: string, rawBody: Buffer) {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_placeholder';
+    const stripe = this.getStripeClient();
     let event: Stripe.Event;
 
     try {
-      event = this.stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+      event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
     } catch (err: any) {
       throw new BadRequestException(`Webhook Error: ${err.message}`);
     }
@@ -254,5 +255,15 @@ export class BillingService {
     if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') {
       throw new BadRequestException('Stripe secret key is not configured.');
     }
+  }
+
+  private getStripeClient() {
+    this.ensureStripeConfigured();
+    if (!this.stripe) {
+      this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: '2026-06-24.dahlia' as any,
+      });
+    }
+    return this.stripe;
   }
 }

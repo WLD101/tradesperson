@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, GetObjectCommand, type S3ClientConfig } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -10,8 +10,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class StorageService {
-  private s3Client: S3Client;
-  private bucketName: string;
+  private readonly logger = new Logger(StorageService.name);
+  private s3Client: S3Client | null = null;
+  private bucketName: string | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -21,15 +22,21 @@ export class StorageService {
   ) {
     const accessKeyId =
       this.configService.get<string>('AWS_ACCESS_KEY_ID') ??
-      this.configService.getOrThrow<string>('S3_ACCESS_KEY_ID');
+      this.configService.get<string>('S3_ACCESS_KEY_ID');
     const secretAccessKey =
       this.configService.get<string>('AWS_SECRET_ACCESS_KEY') ??
-      this.configService.getOrThrow<string>('S3_SECRET_ACCESS_KEY');
-
-    this.bucketName =
+      this.configService.get<string>('S3_SECRET_ACCESS_KEY');
+    const bucketName =
       this.configService.get<string>('S3_BUCKET_NAME') ??
-      this.configService.getOrThrow<string>('S3_BUCKET');
-    
+      this.configService.get<string>('S3_BUCKET');
+
+    if (!accessKeyId || !secretAccessKey || !bucketName) {
+      this.logger.warn('S3 storage is not fully configured; upload/download features will stay disabled.');
+      return;
+    }
+
+    this.bucketName = bucketName;
+
     const s3Config: S3ClientConfig = {
       region:
         this.configService.get<string>('AWS_REGION') ??
@@ -53,6 +60,7 @@ export class StorageService {
     session: Parameters<TenantAccessService["ensureTenant"]>[0],
     dto: RequestUploadUrlDto,
   ) {
+    const { client, bucketName } = this.requireStorage();
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     await this.ensureEntityAccess(session, dto.entityType, dto.entityId);
     const fileId = uuidv4();
@@ -77,7 +85,7 @@ export class StorageService {
 
     // 2. Generate presigned PUT URL (valid for 15 minutes)
     const command = new PutObjectCommand({
-      Bucket: this.bucketName,
+      Bucket: bucketName,
       Key: storageKey,
       ContentType: dto.contentType,
       ContentLength: dto.sizeBytes,
@@ -87,7 +95,7 @@ export class StorageService {
       },
     });
 
-    const uploadUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 900 });
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn: 900 });
 
     return {
       fileId: attachment.id,
@@ -115,6 +123,7 @@ export class StorageService {
   }
 
   async generateDownloadUrl(session: Parameters<TenantAccessService["ensureTenant"]>[0], fileId: string) {
+    const { client, bucketName } = this.requireStorage();
     const { tenantId } = this.tenantAccess.ensureTenant(session);
     const attachment = await this.prisma.client.fileAttachment.findFirst({
       where: { id: fileId, tenantId, status: 'UPLOADED' },
@@ -126,17 +135,28 @@ export class StorageService {
     await this.ensureEntityAccess(session, attachment.entityType, attachment.entityId);
 
     const command = new GetObjectCommand({
-      Bucket: this.bucketName,
+      Bucket: bucketName,
       Key: attachment.storageKey,
       ResponseContentDisposition: `inline; filename="${attachment.fileName}"`,
     });
 
-    const downloadUrl = await getSignedUrl(this.s3Client, command, { expiresIn: 900 });
+    const downloadUrl = await getSignedUrl(client, command, { expiresIn: 900 });
 
     return {
       downloadUrl,
       fileName: attachment.fileName,
       contentType: attachment.contentType,
+    };
+  }
+
+  private requireStorage() {
+    if (!this.s3Client || !this.bucketName) {
+      throw new ServiceUnavailableException('File storage is not configured for this environment.');
+    }
+
+    return {
+      client: this.s3Client,
+      bucketName: this.bucketName,
     };
   }
 

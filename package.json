@@ -43,5 +43,16 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.35.1",
     "vitest": "^3.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "@scarf/scarf",
+      "esbuild",
+      "msgpackr-extract",
+      "prisma",
+      "sharp"
+    ]
   }
 }

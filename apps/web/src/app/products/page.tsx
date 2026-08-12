@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { buildPageMetadata } from "@/components/website/site-metadata";
 import { productFamily } from "@/components/website/site-data";
+import { publicLinks } from "@/components/website/site-links";
 import { FeatureGrid, FinalCta, PageHero, PublicSiteShell, SectionHeader } from "@/components/website/public-site";
 
 export const metadata: Metadata = buildPageMetadata({

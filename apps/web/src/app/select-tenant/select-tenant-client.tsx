@@ -34,8 +34,8 @@ export function SelectTenantClient({
           return;
         }
 
-        router.push("/app/dashboard");
         router.refresh();
+        router.push("/app/dashboard");
       } catch {
         setError("Workspace service is not reachable. Start the API preview, then try again.");
         setOpeningTenantId(null);

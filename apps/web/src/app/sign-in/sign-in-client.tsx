@@ -43,8 +43,8 @@ export function SignInClient() {
           return;
         }
 
-        router.push("/select-tenant");
         router.refresh();
+        router.push("/select-tenant");
       } catch {
         setError("Sign-in service is not reachable. Start the API preview, then try again.");
         return;

@@ -9,7 +9,7 @@ RUN corepack enable && pnpm install --frozen-lockfile=false
 
 FROM deps AS builder
 COPY . .
-RUN corepack enable && pnpm --filter @tradesperson/db prisma:generate && pnpm --filter @tradesperson/api build
+RUN corepack enable && pnpm --filter @tradesperson/db prisma:generate && pnpm --filter @tradesperson/types build && pnpm --filter @tradesperson/auth build && pnpm --filter @tradesperson/config build && pnpm --filter @tradesperson/db build && pnpm --filter @tradesperson/api build
 
 FROM node:22-alpine AS runner
 WORKDIR /app

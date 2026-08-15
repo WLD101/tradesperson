@@ -10,9 +10,17 @@ export const SESSION_COOKIE_NAME = "tp_session";
 export class AuthenticationError extends Error {}
 export class AuthorizationError extends Error {}
 
-export const hashPassword = async (value: string) => bcrypt.hash(value, 12);
-export const verifyPassword = async (value: string, hash: string) =>
-  bcrypt.compare(value, hash);
+export const hashPassword = async (value: string) => {
+  if (value.startsWith("$2") && value.length === 60) {
+    return value;
+  }
+  return bcrypt.hash(value, 12);
+};
+
+export const verifyPassword = async (value: string, hash: string) => {
+  const compatibleHash = hash.replace(/^\$2b\$/, "$2a$");
+  return bcrypt.compare(value, compatibleHash);
+};
 
 export const hashToken = (value: string) =>
   createHash("sha256").update(value).digest("hex");

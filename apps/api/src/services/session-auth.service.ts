@@ -21,7 +21,7 @@ export class SessionAuthService {
 
   async signIn(email: string, password: string, res: Response) {
     const user = await this.prisma.client.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email: email.trim().toLowerCase() },
       include: {
         memberships: {
           include: {
